@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>YOUR MUSIC — 회전초밥 노래 추천</title>
+
+<!-- 폰트: Pokemon GB (영문/숫자) + Galmuri11 (한글 픽셀) + Press Start 2P 폴백 -->
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/galmuri.css" rel="stylesheet">
+<style>
+  @font-face {
+    font-family: 'Pokemon GB';
+    src: url('https://cdn.jsdelivr.net/gh/khanrc/pokemon-gb-font/Pokemon%20GB.ttf') format('truetype');
+    font-display: swap;
+  }
+</style>
+
+<!-- React + Babel (도키도키트립 패턴 동일) -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; min-height: 100vh;
+    background: #1A1A2E;
+    font-family: 'Galmuri11', 'Pokemon GB', 'Press Start 2P', monospace;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  #root { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 0; }
+
+  /* 폰 프레임 (도키도키트립 동일 390x844) */
+  .phone {
+    width: 390px; height: 844px;
+    background: #FFF;
+    border-radius: 44px;
+    overflow: hidden;
+    box-shadow: 0 40px 100px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.07);
+    display: flex; flex-direction: column;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .screen { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+  .scroll-area { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+  .scroll-area::-webkit-scrollbar { display: none; }
+
+  /* 모바일 풀스크린 */
+  @media (max-width: 420px) {
+    html, body { background: #1A1A2E; align-items: flex-start; }
+    .phone { width: 100%; height: 100vh; border-radius: 0; box-shadow: none; }
+    #root { padding: 0; align-items: stretch; }
+  }
+
+  /* 회전초밥 애니메이션 */
+  @keyframes orbitPath   { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+  @keyframes beltFlow    { from { background-position: 0 0; } to { background-position: 48px 0; } }
+  @keyframes featuredCoverFade {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+    18%, 72% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+  }
+  @keyframes blink       { 0%,50% { opacity: 1; } 51%,100% { opacity: 0; } }
+
+  /* 픽셀 텍스트 렌더링 (자글자글한 픽셀 유지) */
+  .pixel-crisp { image-rendering: pixelated; -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
+
+  /* placeholder 픽셀 폰트 */
+  input::placeholder, textarea::placeholder {
+    font-family: 'Galmuri11', monospace;
+    color: #999;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="music-data.js"></script>
+<script type="text/babel" src="components.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+// 공유 컴포넌트 참조
+const T2 = window.T;
+const SBar = () => React.createElement(window.StatusBar, null);
+const TNav = (props) => React.createElement(window.TopNav, props);
+const Dialog = (props) => React.createElement(window.PixelDialog, props);
+const Btn = (props) => React.createElement(window.PixelButton, props);
+const Input = (props) => React.createElement(window.PixelInput, props);
+const TArea = (props) => React.createElement(window.PixelTextarea, props);
+const Plate = (props) => React.createElement(window.AlbumPlate, props);
+const Belt = (props) => React.createElement(window.SushiBelt, props);
+const Bg = (props) => React.createElement(window.CityPopBackground, props);
+
+const CONTACT_LABELS = {
+  email: '이메일',
+  instagram: '인스타그램 ID',
+  kakao: '카카오톡 ID',
+  phone: '전화번호',
+};
+
+function clean(value) {
+  return String(value || '').trim();
+}
+
+function isValidContact(type, value) {
+  const v = clean(value);
+  if (!v) return false;
+  if (type === 'email') return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  if (type === 'instagram') return /^@?[a-zA-Z0-9._]{2,30}$/.test(v);
+  if (type === 'phone') return /^01[016789]-?\d{3,4}-?\d{4}$/.test(v);
+  return v.length >= 2;
+}
+
+function validateSubmission({ artist, title, matched, confirmed, scene, contactType, contact, privacyAgreed }) {
+  const nextErrors = {};
+
+  if (!clean(artist) && !clean(title)) {
+    nextErrors.song = '가수 또는 노래 제목 중 하나는 입력해주세요.';
+  }
+
+  if (matched && !confirmed) {
+    nextErrors.confirmed = '검색된 노래가 맞는지 YES를 눌러 확인해주세요.';
+  }
+
+  if (!clean(scene)) {
+    nextErrors.scene = '노래와 연결된 장면이나 경험담을 적어주세요.';
+  }
+
+  if (!clean(contact)) {
+    nextErrors.contact = `${CONTACT_LABELS[contactType]}를 입력해주세요.`;
+  } else if (!isValidContact(contactType, contact)) {
+    nextErrors.contact = `${CONTACT_LABELS[contactType]} 형식을 확인해주세요.`;
+  }
+
+  if (!privacyAgreed) {
+    nextErrors.privacy = '경품 연락을 위한 개인정보 수집에 동의해주세요.';
+  }
+
+  return nextErrors;
+}
+
+function ErrorText({ children }) {
+  if (!children) return null;
+  return (
+    <div style={{ marginTop: 8, color: T2.magenta, fontSize: 11, lineHeight: 1.5, fontWeight: 'bold' }}>
+      {children}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 화면 1: 랜딩 (기분 입력 + 추천 시작)
+// ══════════════════════════════════════════════════════════════
+function HomeScreen({ navigate }) {
+  const [mood, setMood] = useState('');
+  const squareBlockStyle = {
+    width: '100%',
+    aspectRatio: '1 / 1',
+    display: 'flex',
+    flexShrink: 0,
+  };
+  const squareDialogStyle = {
+    width: '100%',
+    height: '100%',
+  };
+  const squareContentStyle = {
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+  };
+
+  return (
+    <div className="screen">
+      <Bg>
+        <SBar />
+        <TNav title="YOUR MUSIC" subtitle="이 음악은? · 노래 추천 회전초밥" />
+
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          padding: '8px 14px',
+        }}>
+        {/* 입력 카드 A: 기분 */}
+        <div style={squareBlockStyle}>
+          <Dialog color={T2.paper} style={squareDialogStyle} contentStyle={squareContentStyle}>
+            <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.magenta, marginBottom: 8, letterSpacing: '0.05em' }}>
+              MOOD ?
+            </div>
+            <div style={{ marginBottom: 10, fontWeight: 'bold', lineHeight: 1.5 }}>
+              지금 당신의 기분은 어떠신가요?
+            </div>
+            <Input
+              value={mood}
+              onChange={e => setMood(e.target.value)}
+              placeholder="예: 일요일 오후, 조금 나른한"
+            />
+            <div style={{ marginTop: 'auto', textAlign: 'center' }}>
+              <Btn
+                color={T2.magenta}
+                size="md"
+                onClick={() => navigate('belt', { mood })}
+                style={{ width: '100%', fontFamily: T2.fontKr, fontSize: 12 }}
+              >
+                ♪ 노래 추천 받기 ♪
+              </Btn>
+            </div>
+          </Dialog>
+        </div>
+
+        {/* 입력 카드 B: 노래 추천 유도 */}
+        <div style={squareBlockStyle}>
+          <Dialog color={T2.paper} style={squareDialogStyle} contentStyle={squareContentStyle}>
+            <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.cyan, marginBottom: 8, letterSpacing: '0.05em' }}>
+              SHARE A SONG
+            </div>
+            <div style={{ marginBottom: 12, fontWeight: 'bold', lineHeight: 1.5 }}>
+              내가 이런 기분일때 들었던<br/>좋은 노래가 있나요?
+            </div>
+            <div style={{ marginTop: 'auto', textAlign: 'center' }}>
+              <Btn
+                color={T2.cyan}
+                size="md"
+                onClick={() => navigate('form', { mood })}
+                style={{ width: '100%', fontFamily: T2.fontKr, fontSize: 12 }}
+              >
+                ♪ 내 노래도 추천하기 ♪
+              </Btn>
+            </div>
+          </Dialog>
+        </div>
+        </div>
+      </Bg>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 화면 2: 회전초밥 레일
+// ══════════════════════════════════════════════════════════════
+function BeltScreen({ navigate, initialData }) {
+  const plates = window.SUSHI_PLATES;
+  const mood = clean(initialData && initialData.mood);
+  const [activeSong, setActiveSong] = useState(plates[0] || null);
+  const r = activeSong && activeSong.recommender;
+
+  return (
+    <div className="screen">
+      <Bg>
+        <SBar />
+        <TNav title="PICK A SONG" subtitle="접시 위 앨범커버를 골라보세요" onBack={() => navigate('home')} />
+
+        <div style={{ padding: '0 14px 14px' }}>
+          <Dialog blinkArrow color={T2.cream}>
+            {mood ? (
+              <>지금 기분: <strong>{mood}</strong><br/>레일 위 접시에서 끌리는 앨범을 골라보세요.</>
+            ) : (
+              <>레일 위 접시에서 끌리는 앨범을 골라보세요.</>
+            )}
+          </Dialog>
+        </div>
+
+        <div style={{
+          minHeight: 360,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '18px 0 8px',
+        }}>
+          <div style={{ position: 'relative' }}>
+            <Belt
+              plates={plates}
+              radius={118}
+              plateSize={66}
+              onActiveSongChange={setActiveSong}
+              onPlateClick={(song) => navigate('banner', song)}
+            />
+            {activeSong && (
+              <div
+                key={activeSong.id}
+                onClick={() => navigate('banner', activeSong)}
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '74%',
+                  width: 144,
+                  height: 144,
+                  transform: 'translate(-50%, -50%)',
+                  background: activeSong.coverColor,
+                  border: `4px solid ${T2.ink}`,
+                  boxShadow: `5px 5px 0 ${T2.ink}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  zIndex: 80,
+                  animation: 'featuredCoverFade 3s ease-in-out infinite',
+                }}
+              >
+                {activeSong.coverImage ? (
+                  <img
+                    src={activeSong.coverImage}
+                    alt={`${activeSong.artist} - ${activeSong.title}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                ) : (
+                  <div style={{ fontSize: 40 }}>{activeSong.cover}</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {activeSong && (
+          <div style={{ padding: '0 14px 12px' }}>
+            <Dialog color={T2.paper}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+                <div style={{
+                  width: 54,
+                  height: 54,
+                  background: activeSong.coverColor,
+                  border: `3px solid ${T2.ink}`,
+                  boxShadow: `2px 2px 0 ${T2.ink}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                }}>
+                  {activeSong.coverImage ? (
+                    <img
+                      src={activeSong.coverImage}
+                      alt={`${activeSong.artist} - ${activeSong.title}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  ) : (
+                    activeSong.cover
+                  )}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.magenta, marginBottom: 4, letterSpacing: '0.04em' }}>
+                    THIS SONG
+                  </div>
+                  <div style={{ fontFamily: T2.fontEn, fontSize: 10.5, color: T2.ink, lineHeight: 1.3 }}>
+                    {activeSong.title}
+                  </div>
+                  <div style={{ fontSize: 11, color: T2.inkSoft, marginTop: 3 }}>
+                    ♪ {activeSong.artist}
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: 11.5, lineHeight: 1.55, marginBottom: activeSong.lyric ? 8 : 0 }}>
+                "{activeSong.scene}"
+              </div>
+              {activeSong.lyric && activeSong.lyric !== '(instrumental)' && (
+                <div style={{ fontSize: 11, color: T2.lavender, lineHeight: 1.5, marginBottom: 8 }}>
+                  ♪ {activeSong.lyric}
+                </div>
+              )}
+              {r && (r.name || r.age || r.city) && (
+                <div style={{ fontSize: 10.5, color: T2.inkSoft }}>
+                  BY {r.name || '?'} {r.age ? `· ${r.age}세` : ''} {r.city ? `· ${r.city}` : ''}
+                </div>
+              )}
+            </Dialog>
+          </div>
+        )}
+
+        <div style={{
+          textAlign: 'center',
+          fontFamily: T2.fontEn,
+          fontSize: 8,
+          color: '#fff',
+          textShadow: `1px 1px 0 ${T2.ink}`,
+          marginBottom: 18,
+          letterSpacing: '0.1em',
+        }}>
+          ▼ TAP AN ALBUM PLATE ▼
+        </div>
+
+        <div style={{ height: 16 }} />
+      </Bg>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 화면 3: 노래 추천 폼
+// ══════════════════════════════════════════════════════════════
+function FormScreen({ navigate, initialData }) {
+  const [artist, setArtist] = useState('');
+  const [title, setTitle] = useState('');
+  const [matched, setMatched] = useState(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [scene, setScene] = useState('');
+  const [lyric, setLyric] = useState('');
+  const [showOptional, setShowOptional] = useState(false);
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [city, setCity] = useState('');
+  const [contactType, setContactType] = useState('email');
+  const [contact, setContact] = useState('');
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  function clearErrors(...keys) {
+    setErrors(current => {
+      const next = { ...current };
+      keys.forEach(key => delete next[key]);
+      return next;
+    });
+  }
+
+  // 가수/제목 입력 시 mock 데이터에서 찾기
+  useEffect(() => {
+    if (artist.length >= 2 || title.length >= 2) {
+      const results = window.findSongs({ artist, title });
+      setMatched(results[0] || null);
+      setConfirmed(false);
+    } else {
+      setMatched(null);
+      setConfirmed(false);
+    }
+  }, [artist, title]);
+
+  function submit() {
+    const nextErrors = validateSubmission({
+      artist,
+      title,
+      matched,
+      confirmed,
+      scene,
+      contactType,
+      contact,
+      privacyAgreed,
+    });
+
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    const submission = {
+      ...(matched || { artist: clean(artist), title: clean(title), cover: '🎵', coverColor: T2.lavender }),
+      scene: clean(scene),
+      lyric: clean(lyric) || null,
+      recommender: (clean(name) || clean(age) || clean(city))
+        ? { name: clean(name), age: clean(age), city: clean(city) }
+        : null,
+      contact: { type: contactType, value: clean(contact) },
+      privacyAgreed,
+    };
+    navigate('banner', submission);
+  }
+
+  return (
+    <div className="screen">
+      <Bg>
+        <SBar />
+        <TNav title="RECOMMEND" subtitle="노래 추천 카드 작성" onBack={() => navigate('home')} />
+
+        <div style={{ padding: '0 14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+          {/* 가수 / 제목 */}
+          <Dialog color={T2.cream}>
+            <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.magenta, marginBottom: 10, letterSpacing: '0.05em' }}>
+              ♪ SONG INFO
+            </div>
+            <div style={{ marginBottom: 6, fontSize: 11, color: T2.inkSoft }}>가수</div>
+            <Input
+              value={artist}
+              onChange={e => { setArtist(e.target.value); clearErrors('song', 'confirmed'); }}
+              placeholder="예: Mariya Takeuchi"
+            />
+            <div style={{ marginTop: 10, marginBottom: 6, fontSize: 11, color: T2.inkSoft }}>노래 제목</div>
+            <Input
+              value={title}
+              onChange={e => { setTitle(e.target.value); clearErrors('song', 'confirmed'); }}
+              placeholder="예: Plastic Love"
+            />
+            <ErrorText>{errors.song}</ErrorText>
+          </Dialog>
+
+          {/* 미리보기 + 확인 */}
+          {matched && (
+            <Dialog color={T2.paper}>
+              <div style={{ fontFamily: T2.fontEn, fontSize: 9, color: T2.cyan, marginBottom: 10, letterSpacing: '0.05em' }}>
+                IS THIS RIGHT?
+              </div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+                <Plate song={matched} size={64} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: T2.fontEn, fontSize: 11, color: T2.ink, marginBottom: 4, lineHeight: 1.3 }}>
+                    {matched.title}
+                  </div>
+                  <div style={{ fontSize: 11, color: T2.inkSoft }}>{matched.artist}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Btn
+                  color={confirmed ? T2.cyan : T2.paper}
+                  textColor={confirmed ? '#fff' : T2.ink}
+                  size="sm"
+                  onClick={() => { setConfirmed(true); clearErrors('confirmed'); }}
+                  style={{ flex: 1 }}
+                >YES ♥</Btn>
+                <Btn
+                  color={T2.paper}
+                  textColor={T2.ink}
+                  size="sm"
+                  onClick={() => { setMatched(null); setConfirmed(false); clearErrors('confirmed'); }}
+                  style={{ flex: 1 }}
+                >NO</Btn>
+              </div>
+              <ErrorText>{errors.confirmed}</ErrorText>
+            </Dialog>
+          )}
+
+          {/* 추첨 안내 */}
+          <Dialog color={T2.yellow} blinkArrow>
+            <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.ink, marginBottom: 6, letterSpacing: '0.05em' }}>
+              ★ GIFT ★
+            </div>
+            추첨을 통해 선물을 드립니다 🎁
+          </Dialog>
+
+          {/* 경험담 */}
+          <Dialog color={T2.paper}>
+            <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.lavender, marginBottom: 10, letterSpacing: '0.05em' }}>
+              YOUR SCENE
+            </div>
+            <div style={{ marginBottom: 8, fontSize: 11.5 }}>
+              이 노래를 들었을때 떠오르는<br/>장면 또는 개인적인 경험담
+            </div>
+            <TArea
+              value={scene}
+              onChange={e => { setScene(e.target.value); clearErrors('scene'); }}
+              placeholder="예: 한밤중 시부야 횡단보도에서..."
+              rows={4}
+            />
+            <ErrorText>{errors.scene}</ErrorText>
+          </Dialog>
+
+          {/* 가사 (옵션) */}
+          <Dialog color={T2.paper}>
+            <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.peach, marginBottom: 10, letterSpacing: '0.05em' }}>
+              LYRIC (OPTIONAL)
+            </div>
+            <div style={{ marginBottom: 8, fontSize: 11.5 }}>마음에 드는 가사 한줄</div>
+            <Input
+              value={lyric}
+              onChange={e => setLyric(e.target.value)}
+              placeholder="(선택)"
+            />
+          </Dialog>
+
+          {/* 추천자 정보 (옵션) */}
+          <div>
+            <Btn
+              color={T2.paper}
+              textColor={T2.ink}
+              size="sm"
+              onClick={() => setShowOptional(s => !s)}
+              style={{ width: '100%' }}
+            >
+              {showOptional ? '▲ HIDE' : '▼ ABOUT YOU (OPTIONAL)'}
+            </Btn>
+          </div>
+          {showOptional && (
+            <Dialog color={T2.paper}>
+              <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.skyblue, marginBottom: 10, letterSpacing: '0.05em' }}>
+                ABOUT YOU
+              </div>
+              <div style={{ marginBottom: 6, fontSize: 11, color: T2.inkSoft }}>이름</div>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="(선택)" />
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ marginBottom: 6, fontSize: 11, color: T2.inkSoft }}>나이</div>
+                  <Input value={age} onChange={e => setAge(e.target.value)} type="number" placeholder="(선택)" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ marginBottom: 6, fontSize: 11, color: T2.inkSoft }}>사는곳</div>
+                  <Input value={city} onChange={e => setCity(e.target.value)} placeholder="(선택)" />
+                </div>
+              </div>
+            </Dialog>
+          )}
+
+          {/* 연락처 */}
+          <Dialog color={T2.paper}>
+            <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.magenta, marginBottom: 10, letterSpacing: '0.05em' }}>
+              CONTACT (FOR GIFT)
+            </div>
+            <div style={{ marginBottom: 8, fontSize: 11.5 }}>경품 당첨시 연락할 곳</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {[
+                { k: 'email', l: 'EMAIL' },
+                { k: 'instagram', l: 'INSTA' },
+                { k: 'kakao', l: 'KAKAO' },
+                { k: 'phone', l: 'PHONE' },
+              ].map(o => (
+                <button
+                  key={o.k}
+                  onClick={() => { setContactType(o.k); clearErrors('contact'); }}
+                  style={{
+                    padding: '6px 10px',
+                    background: contactType === o.k ? T2.ink : T2.paper,
+                    color: contactType === o.k ? '#fff' : T2.ink,
+                    border: `2px solid ${T2.ink}`,
+                    fontFamily: T2.fontEn, fontSize: 9, cursor: 'pointer',
+                    letterSpacing: '0.05em',
+                  }}
+                >{o.l}</button>
+              ))}
+            </div>
+            <Input
+              value={contact}
+              onChange={e => { setContact(e.target.value); clearErrors('contact'); }}
+              placeholder={
+                contactType === 'email' ? 'you@email.com' :
+                contactType === 'instagram' ? '@instagram_id' :
+                contactType === 'kakao' ? 'kakaotalk_id' :
+                '010-0000-0000'
+              }
+            />
+            <ErrorText>{errors.contact}</ErrorText>
+            <label style={{
+              display: 'flex', gap: 8, alignItems: 'flex-start',
+              marginTop: 12, fontSize: 10.5, lineHeight: 1.5,
+              color: T2.inkSoft, cursor: 'pointer',
+            }}>
+              <input
+                type="checkbox"
+                checked={privacyAgreed}
+                onChange={e => { setPrivacyAgreed(e.target.checked); clearErrors('privacy'); }}
+                style={{ marginTop: 2, width: 14, height: 14, accentColor: T2.magenta }}
+              />
+              <span>경품 당첨 연락을 위해 입력한 연락처를 수집하는 데 동의합니다.</span>
+            </label>
+            <ErrorText>{errors.privacy}</ErrorText>
+          </Dialog>
+
+          {/* 제출 */}
+          <div style={{ marginTop: 4 }}>
+            <Btn
+              color={T2.cyan}
+              size="lg"
+              onClick={submit}
+              style={{ width: '100%' }}
+            >
+              ★ SUBMIT ★
+            </Btn>
+          </div>
+
+          <div style={{ height: 16 }} />
+        </div>
+      </Bg>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 화면 4: 음악 소개 배너
+// ══════════════════════════════════════════════════════════════
+function BannerScreen({ song, navigate }) {
+  if (!song) return null;
+  const r = song.recommender;
+
+  return (
+    <div className="screen">
+      <Bg>
+        <SBar />
+        <TNav title="THIS SONG" subtitle="이 노래는…" onBack={() => navigate('home')} />
+
+        <div style={{ padding: '6px 14px 16px' }}>
+
+          {/* 큰 앨범커버 + 제목 */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{
+              width: 160, height: 160,
+              background: song.coverColor,
+              border: `4px solid ${T2.ink}`,
+              boxShadow: `5px 5px 0 ${T2.ink}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden',
+              fontSize: 80,
+              marginBottom: 16,
+            }}>
+              {song.coverImage ? (
+                <img
+                  src={song.coverImage}
+                  alt={`${song.artist} - ${song.title}`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                song.cover
+              )}
+            </div>
+            <div style={{
+              fontFamily: T2.fontEn, fontSize: 14, color: '#fff',
+              textShadow: `2px 2px 0 ${T2.ink}`,
+              textAlign: 'center', lineHeight: 1.3,
+              marginBottom: 6,
+            }}>
+              {song.title}
+            </div>
+            <div style={{
+              fontFamily: T2.fontEn, fontSize: 9, color: '#fff',
+              textShadow: `1px 1px 0 ${T2.ink}`,
+              letterSpacing: '0.1em',
+            }}>
+              ♪ {song.artist} ♪
+            </div>
+          </div>
+
+          {/* 경험담 (대화창) */}
+          <div style={{ marginBottom: 12 }}>
+            <Dialog color={T2.cream}>
+              <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.magenta, marginBottom: 8, letterSpacing: '0.05em' }}>
+                ♥ THE SCENE
+              </div>
+              "{song.scene}"
+            </Dialog>
+          </div>
+
+          {/* 가사 (있을 때만) */}
+          {song.lyric && song.lyric !== '(instrumental)' && (
+            <div style={{ marginBottom: 12 }}>
+              <Dialog color={T2.paper}>
+                <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.lavender, marginBottom: 8, letterSpacing: '0.05em' }}>
+                  ♪ LYRIC
+                </div>
+                <div style={{ fontStyle: 'italic', textAlign: 'center', fontSize: 13, lineHeight: 1.6 }}>
+                  ❝ {song.lyric} ❞
+                </div>
+              </Dialog>
+            </div>
+          )}
+
+          {/* 추천자 */}
+          {r && (r.name || r.age || r.city) && (
+            <div style={{ marginBottom: 16 }}>
+              <Dialog color={T2.paper}>
+                <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.cyan, marginBottom: 8, letterSpacing: '0.05em' }}>
+                  RECOMMENDED BY
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
+                  {r.name && <span style={{ fontWeight: 'bold' }}>{r.name}</span>}
+                  {r.age && <span style={{ color: T2.inkSoft }}>{r.age}세</span>}
+                  {r.city && <span style={{ color: T2.inkSoft }}>· {r.city}</span>}
+                </div>
+              </Dialog>
+            </div>
+          )}
+
+          {/* 다른 노래 보기 */}
+          <Btn
+            color={T2.magenta}
+            size="lg"
+            onClick={() => navigate('home')}
+            style={{ width: '100%' }}
+          >
+            ◀ ANOTHER PLATE
+          </Btn>
+
+          <div style={{ height: 16 }} />
+        </div>
+      </Bg>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// App: 화면 라우팅
+// ══════════════════════════════════════════════════════════════
+function App() {
+  const [screen, setScreen] = useState('home');
+  const [data, setData] = useState(null);
+
+  function navigate(to, payload) {
+    setScreen(to);
+    if (payload !== undefined) setData(payload);
+    // 화면 전환 시 스크롤 최상단
+    setTimeout(() => {
+      const sa = document.querySelector('.scroll-area');
+      if (sa) sa.scrollTop = 0;
+    }, 0);
+  }
+
+  const screens = {
+    home:   <HomeScreen navigate={navigate} />,
+    belt:   <BeltScreen navigate={navigate} initialData={data} />,
+    form:   <FormScreen navigate={navigate} initialData={data} />,
+    banner: <BannerScreen navigate={navigate} song={data} />,
+  };
+
+  return <div className="phone">{screens[screen] || screens.home}</div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
