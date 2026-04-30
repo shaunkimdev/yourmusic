@@ -1,0 +1,4 @@
+window.YOURMUSIC_CONFIG = {
+  supabaseUrl: 'https://jqymdpuosjcjvuoxjjqr.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxeW1kcHVvc2pjanZ1b3hqanFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1MzUyNzksImV4cCI6MjA5MzExMTI3OX0.Sygr5fOMGpdUotMupbjRKtfONIQlLoHF1raMkjAZNRY',
+};
