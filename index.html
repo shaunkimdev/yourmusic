@@ -152,25 +152,240 @@ function ErrorText({ children }) {
   );
 }
 
+function loadSpotifyIframeApi() {
+  if (window.spotifyIframeApi) return Promise.resolve(window.spotifyIframeApi);
+  if (window.spotifyIframeApiPromise) return window.spotifyIframeApiPromise;
+
+  window.spotifyIframeApiPromise = new Promise((resolve) => {
+    window.onSpotifyIframeApiReady = (IFrameAPI) => {
+      window.spotifyIframeApi = IFrameAPI;
+      resolve(IFrameAPI);
+    };
+
+    if (!document.querySelector('script[data-spotify-iframe-api]')) {
+      const script = document.createElement('script');
+      script.src = 'https://open.spotify.com/embed/iframe-api/v1';
+      script.async = true;
+      script.dataset.spotifyIframeApi = 'true';
+      document.body.appendChild(script);
+    }
+  });
+
+  return window.spotifyIframeApiPromise;
+}
+
+function SpotifyMiniEmbed({ song }) {
+  const embedRef = React.useRef(null);
+  const controllerRef = React.useRef(null);
+  const playTimerRef = React.useRef(null);
+  const requestedUriRef = React.useRef(null);
+  const userUnlockedAudioRef = React.useRef(false);
+  const [isReady, setIsReady] = React.useState(false);
+  const [audioEnabled, setAudioEnabled] = React.useState(false);
+  const [playState, setPlayState] = React.useState('idle');
+  const spotifyUri = song && song.spotifyTrackId ? `spotify:track:${song.spotifyTrackId}` : null;
+
+  const playRequestedSong = React.useCallback(() => {
+    window.clearTimeout(playTimerRef.current);
+    playTimerRef.current = window.setTimeout(() => {
+      if (controllerRef.current && requestedUriRef.current) {
+        setPlayState('loading');
+        controllerRef.current.resume();
+      }
+    }, 260);
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    loadSpotifyIframeApi().then((IFrameAPI) => {
+      if (cancelled || !embedRef.current || controllerRef.current) return;
+
+      IFrameAPI.createController(
+        embedRef.current,
+        { uri: 'spotify:track:7rU6Iebxzlvqy5t857bKFq', width: '100%', height: 80 },
+        (EmbedController) => {
+          if (cancelled) {
+            EmbedController.pause();
+            return;
+          }
+          controllerRef.current = EmbedController;
+          setIsReady(true);
+          EmbedController.addListener('ready', () => setIsReady(true));
+          EmbedController.addListener('playback_started', () => setPlayState('playing'));
+          EmbedController.addListener('playback_update', (event) => {
+            if (!event || !event.data) return;
+            if (event.data.isBuffering) {
+              setPlayState('loading');
+            } else if (event.data.isPaused) {
+              setPlayState(userUnlockedAudioRef.current ? 'paused' : 'ready');
+            } else {
+              setPlayState('playing');
+            }
+          });
+        }
+      );
+    });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(playTimerRef.current);
+      if (controllerRef.current) {
+        controllerRef.current.pause();
+      }
+    };
+  }, []);
+
+  React.useEffect(() => {
+    requestedUriRef.current = spotifyUri;
+
+    if (!controllerRef.current || !isReady) return undefined;
+
+    if (!spotifyUri) {
+      window.clearTimeout(playTimerRef.current);
+      controllerRef.current.pause();
+      setPlayState('unavailable');
+      return undefined;
+    }
+
+    setPlayState(audioEnabled ? 'loading' : 'ready');
+    controllerRef.current.pause();
+    controllerRef.current.loadUri(spotifyUri);
+
+    if (audioEnabled) {
+      playRequestedSong();
+    }
+
+    return undefined;
+  }, [spotifyUri, isReady, audioEnabled, playRequestedSong]);
+
+  function enableAudio() {
+    if (!spotifyUri) return;
+    userUnlockedAudioRef.current = true;
+    setAudioEnabled(true);
+    setPlayState('loading');
+    window.dispatchEvent(new CustomEvent('yourmusic-spotify-status', { detail: { audioEnabled: true } }));
+    requestedUriRef.current = spotifyUri;
+
+    const start = () => {
+      if (controllerRef.current) {
+        controllerRef.current.pause();
+        controllerRef.current.loadUri(spotifyUri);
+        setPlayState('playing');
+        controllerRef.current.resume();
+      }
+    };
+
+    if (controllerRef.current) {
+      start();
+    } else {
+      loadSpotifyIframeApi().then(start);
+    }
+  }
+
+  function disableAudio() {
+    window.clearTimeout(playTimerRef.current);
+    userUnlockedAudioRef.current = false;
+    setAudioEnabled(false);
+    setPlayState(spotifyUri ? 'ready' : 'unavailable');
+    if (controllerRef.current) {
+      controllerRef.current.pause();
+    }
+    window.dispatchEvent(new CustomEvent('yourmusic-spotify-status', { detail: { audioEnabled: false } }));
+  }
+
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent('yourmusic-spotify-status', { detail: { isReady, audioEnabled } }));
+  }, [isReady, audioEnabled]);
+
+  React.useEffect(() => {
+    window.addEventListener('yourmusic-enable-spotify-auto', enableAudio);
+    window.addEventListener('yourmusic-disable-spotify-auto', disableAudio);
+    return () => {
+      window.removeEventListener('yourmusic-enable-spotify-auto', enableAudio);
+      window.removeEventListener('yourmusic-disable-spotify-auto', disableAudio);
+    };
+  });
+
+  return (
+    <div style={{
+      marginTop: 8,
+      marginBottom: 8,
+      border: `3px solid ${T2.ink}`,
+      boxShadow: `2px 2px 0 ${T2.ink}`,
+      background: T2.ink,
+      height: 80,
+      overflow: 'hidden',
+      position: 'relative',
+    }}>
+      <div
+        ref={embedRef}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          opacity: 0,
+          pointerEvents: 'none',
+        }}
+      />
+      <div style={{
+        height: '100%',
+        padding: '10px 12px',
+        background: '#191414',
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+      }}>
+        <div style={{
+          width: 36,
+          height: 36,
+          flexShrink: 0,
+          border: `2px solid ${spotifyUri ? '#1DB954' : '#777'}`,
+          background: spotifyUri ? '#1DB954' : '#333',
+          color: '#111',
+          fontFamily: T2.fontEn,
+          fontSize: 13,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          ▶
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontFamily: T2.fontEn, fontSize: 8, color: '#1DB954', marginBottom: 5, letterSpacing: '0.04em' }}>
+            SPOTIFY
+          </div>
+          <div style={{ fontSize: 11, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {song ? `${song.title} · ${song.artist}` : 'NO TRACK'}
+          </div>
+          <div style={{ fontSize: 9, color: '#b3b3b3', marginTop: 4 }}>
+            {!spotifyUri ? 'TRACK UNAVAILABLE' : audioEnabled ? playState.toUpperCase() : 'SOUND WAITING'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════
 // 화면 1: 랜딩 (기분 입력 + 추천 시작)
 // ══════════════════════════════════════════════════════════════
 function HomeScreen({ navigate }) {
   const [mood, setMood] = useState('');
-  const squareBlockStyle = {
+  const homeBlockStyle = {
     width: '100%',
-    aspectRatio: '1 / 1',
     display: 'flex',
     flexShrink: 0,
   };
-  const squareDialogStyle = {
+  const homeDialogStyle = {
     width: '100%',
-    height: '100%',
   };
-  const squareContentStyle = {
+  const homeContentStyle = {
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
+    gap: 10,
   };
 
   return (
@@ -182,16 +397,16 @@ function HomeScreen({ navigate }) {
         <div style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 10,
-          padding: '8px 14px',
+          gap: 14,
+          padding: '38px 18px 18px',
         }}>
         {/* 입력 카드 A: 기분 */}
-        <div style={squareBlockStyle}>
-          <Dialog color={T2.paper} style={squareDialogStyle} contentStyle={squareContentStyle}>
+        <div style={homeBlockStyle}>
+          <Dialog color={T2.paper} style={{ ...homeDialogStyle, minHeight: 188 }} contentStyle={homeContentStyle}>
             <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.magenta, marginBottom: 8, letterSpacing: '0.05em' }}>
               MOOD ?
             </div>
-            <div style={{ marginBottom: 10, fontWeight: 'bold', lineHeight: 1.5 }}>
+            <div style={{ fontWeight: 'bold', lineHeight: 1.5 }}>
               지금 당신의 기분은 어떠신가요?
             </div>
             <Input
@@ -213,12 +428,12 @@ function HomeScreen({ navigate }) {
         </div>
 
         {/* 입력 카드 B: 노래 추천 유도 */}
-        <div style={squareBlockStyle}>
-          <Dialog color={T2.paper} style={squareDialogStyle} contentStyle={squareContentStyle}>
+        <div style={homeBlockStyle}>
+          <Dialog color={T2.paper} style={{ ...homeDialogStyle, minHeight: 158 }} contentStyle={homeContentStyle}>
             <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.cyan, marginBottom: 8, letterSpacing: '0.05em' }}>
               SHARE A SONG
             </div>
-            <div style={{ marginBottom: 12, fontWeight: 'bold', lineHeight: 1.5 }}>
+            <div style={{ fontWeight: 'bold', lineHeight: 1.5 }}>
               내가 이런 기분일때 들었던<br/>좋은 노래가 있나요?
             </div>
             <div style={{ marginTop: 'auto', textAlign: 'center' }}>
@@ -244,9 +459,33 @@ function HomeScreen({ navigate }) {
 // ══════════════════════════════════════════════════════════════
 function BeltScreen({ navigate, initialData }) {
   const plates = window.SUSHI_PLATES;
+  const beltDuration = 60;
+  const featuredDuration = `${beltDuration / Math.max(plates.length, 1)}s`;
   const mood = clean(initialData && initialData.mood);
   const [activeSong, setActiveSong] = useState(plates[0] || null);
+  const [spotifyReady, setSpotifyReady] = useState(false);
+  const [spotifyAudioEnabled, setSpotifyAudioEnabled] = useState(false);
   const r = activeSong && activeSong.recommender;
+
+  useEffect(() => {
+    const updateSpotifyStatus = (event) => {
+      if (event.detail && typeof event.detail.isReady === 'boolean') {
+        setSpotifyReady(event.detail.isReady);
+      }
+      if (event.detail && typeof event.detail.audioEnabled === 'boolean') {
+        setSpotifyAudioEnabled(event.detail.audioEnabled);
+      }
+    };
+
+    window.addEventListener('yourmusic-spotify-status', updateSpotifyStatus);
+    return () => window.removeEventListener('yourmusic-spotify-status', updateSpotifyStatus);
+  }, []);
+
+  function toggleSpotifyAuto() {
+    window.dispatchEvent(new CustomEvent(
+      spotifyAudioEnabled ? 'yourmusic-disable-spotify-auto' : 'yourmusic-enable-spotify-auto'
+    ));
+  }
 
   return (
     <div className="screen">
@@ -262,6 +501,28 @@ function BeltScreen({ navigate, initialData }) {
               <>레일 위 접시에서 끌리는 앨범을 골라보세요.</>
             )}
           </Dialog>
+          <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+            <Btn
+              color={spotifyAudioEnabled ? T2.cyan : T2.magenta}
+              size="sm"
+              onClick={toggleSpotifyAuto}
+              style={{
+                fontFamily: T2.fontKr,
+                fontSize: 14,
+                minWidth: 178,
+                opacity: spotifyReady && activeSong && activeSong.spotifyTrackId ? 1 : 0.55,
+                pointerEvents: spotifyReady && activeSong && activeSong.spotifyTrackId ? 'auto' : 'none',
+              }}
+            >
+              🔊 {spotifyAudioEnabled
+                ? '사운드 자동 끄기'
+                : !activeSong || !activeSong.spotifyTrackId
+                  ? 'NO TRACK'
+                  : spotifyReady
+                    ? '사운드 자동 켜기'
+                    : 'LOADING'}
+            </Btn>
+          </div>
         </div>
 
         <div style={{
@@ -299,7 +560,7 @@ function BeltScreen({ navigate, initialData }) {
                   overflow: 'hidden',
                   cursor: 'pointer',
                   zIndex: 80,
-                  animation: 'featuredCoverFade 3s ease-in-out infinite',
+                  animation: `featuredCoverFade ${featuredDuration} ease-in-out forwards`,
                 }}
               >
                 {activeSong.coverImage ? (
@@ -363,10 +624,11 @@ function BeltScreen({ navigate, initialData }) {
                 </div>
               )}
               {r && (r.name || r.age || r.city) && (
-                <div style={{ fontSize: 10.5, color: T2.inkSoft }}>
+                <div style={{ fontSize: 10.5, color: T2.inkSoft, marginBottom: activeSong.spotifyTrackId ? 8 : 0 }}>
                   BY {r.name || '?'} {r.age ? `· ${r.age}세` : ''} {r.city ? `· ${r.city}` : ''}
                 </div>
               )}
+              <SpotifyMiniEmbed song={activeSong} />
             </Dialog>
           </div>
         )}

@@ -12,6 +12,7 @@ window.MUSIC_DATA = [
     mood: 'nostalgic',
     scene: '한밤중 도쿄 시부야 횡단보도, 네온사인 아래 혼자 걷는 기분',
     lyric: '突然のキスや熱いまなざしで',
+    spotifyTrackId: '7rU6Iebxzlvqy5t857bKFq',
     recommender: { name: '유진', age: 28, city: '서울' },
   },
   {
@@ -24,6 +25,7 @@ window.MUSIC_DATA = [
     mood: 'uplifting',
     scene: '여름 해변도로를 차로 달리며 창문 내릴 때',
     lyric: 'Ride on time 時よ止まれ',
+    spotifyTrackId: '',
     recommender: { name: 'Hiro', age: 31, city: '도쿄' },
   },
   {
@@ -36,6 +38,7 @@ window.MUSIC_DATA = [
     mood: 'melancholy',
     scene: '겨울밤 한강 산책로, 입김이 보이는 거리',
     lyric: '얼지말고 있어줘',
+    spotifyTrackId: '31JwlIZJjlUzcemnVi8bdO',
     recommender: { name: '민지', age: 25, city: '부산' },
   },
   {
@@ -48,6 +51,7 @@ window.MUSIC_DATA = [
     mood: 'summer',
     scene: '오키나와 해변에서 수평선 너머 일몰을 바라볼 때',
     lyric: 'Last summer whisper, 風になりたい',
+    spotifyTrackId: '38LUbz74v3nmP8x0efElw2',
     recommender: { name: '소희', age: 27, city: '제주' },
   },
   {
@@ -60,6 +64,7 @@ window.MUSIC_DATA = [
     mood: 'romantic',
     scene: '벚꽃 흩날리는 봄날 오후, 친구와 자전거 타는 길',
     lyric: '봄이 와도 그 곳은 여전한가요',
+    spotifyTrackId: '320twJYO0LC64eWCuCC5vj',
     recommender: { name: '재현', age: 24, city: '서울' },
   },
   {
@@ -72,6 +77,7 @@ window.MUSIC_DATA = [
     mood: 'late-night',
     scene: '12시가 넘은 도쿄 야경을 호텔 창문에서 바라볼 때',
     lyric: '真夜中のドアをたたき',
+    spotifyTrackId: '5DCLkzuWICNar6qn3B393f',
     recommender: { name: '유나', age: 29, city: '인천' },
   },
   {
@@ -84,6 +90,7 @@ window.MUSIC_DATA = [
     mood: 'warm',
     scene: '비 오는 날 오래된 LP 카페에서 따뜻한 커피 한 잔',
     lyric: '나는 읽기 쉬운 마음이야',
+    spotifyTrackId: '5BqwC9kOBbqYkzdOKeXFFk',
     recommender: { name: '도윤', age: 26, city: '대구' },
   },
   {
@@ -96,6 +103,7 @@ window.MUSIC_DATA = [
     mood: 'energetic',
     scene: '새벽 5시, 도시의 첫 해가 빌딩 사이로 떠오를 때',
     lyric: '(instrumental)',
+    spotifyTrackId: '1yQmKOIJE13EcFPIWQS2Pw',
     recommender: { name: 'Kenji', age: 33, city: '오사카' },
   },
 ];

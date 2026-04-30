@@ -264,7 +264,7 @@ function SushiBelt({ plates, onPlateClick, onActiveSongChange, radius = 110, pla
   const cy = beltSize * 0.52;
   const rx = beltSize * 0.32;
   const ry = beltSize * 0.22;
-  const duration = 18;
+  const duration = 60;
   const orbitPath = [
     `M ${cx - rx} ${cy}`,
     `C ${cx - rx} ${cy - ry * 0.5523} ${cx - rx * 0.5523} ${cy - ry} ${cx} ${cy - ry}`,
