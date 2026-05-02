@@ -1,7 +1,7 @@
 # Supabase setup
 
 1. Create a Supabase project.
-2. Apply the migration in `supabase/migrations/202604300001_create_music_recommendation_schema.sql`.
+2. Apply the migrations in `supabase/migrations/` in filename order. Existing projects should also apply `202605020001_add_spotify_preview_url.sql`.
 3. Deploy both Edge Functions:
    - `submit-song`
    - `recommend-songs`
@@ -10,6 +10,8 @@
    - `PROJECT_SERVICE_ROLE_KEY`
    - `OPENAI_API_KEY`
    - Optional: `OPENAI_MODEL`
+   - Optional, but required for Spotify embeds on newly submitted or lazily enriched songs: `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`
+   - Optional: `SPOTIFY_MARKET` (defaults to `KR`)
 5. Copy the public project values into `config.js`:
 
 ```js

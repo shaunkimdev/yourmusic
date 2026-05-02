@@ -32,7 +32,6 @@ const T = {
 // ── Pixel Animation Keyframes ────────────────────────────────
 // (메인 HTML <style>에서도 정의 — 여기서는 참조용)
 //   @keyframes orbitPath    { from { offset-distance:0%; } to { offset-distance:100%; } }
-//   @keyframes beltFlow     { from { background-position:0 0; } to { background-position:48px 0; } }
 //   @keyframes blink        { 0%,50%{opacity:1} 51%,100%{opacity:0} }
 
 // ── Status Bar (모바일 목업 분위기) ──────────────────────────
@@ -261,9 +260,13 @@ function AlbumPlate({ song, size = 80, plateImage, onClick }) {
 function SushiBelt({ plates, onPlateClick, onActiveSongChange, radius = 110, plateSize = 76 }) {
   const beltSize = (radius + plateSize / 2) * 2 + 28;
   const cx = beltSize / 2;
-  const cy = beltSize * 0.52;
-  const rx = beltSize * 0.32;
-  const ry = beltSize * 0.22;
+  const cy = beltSize * 0.45;
+  const rx = beltSize * 0.383;
+  const ry = beltSize * 0.183;
+  const beltSurfaceOuterRx = beltSize * 0.435;
+  const beltSurfaceOuterRy = beltSize * 0.225;
+  const beltSurfaceInnerRx = beltSize * 0.29;
+  const beltSurfaceInnerRy = beltSize * 0.115;
   const duration = 60;
   const orbitPath = [
     `M ${cx - rx} ${cy}`,
@@ -322,46 +325,43 @@ function SushiBelt({ plates, onPlateClick, onActiveSongChange, radius = 110, pla
       overflow: 'hidden',
       imageRendering: 'pixelated',
     }}>
-      {/* 움직이는 레일 하이라이트 */}
-      <div style={{
-        position: 'absolute',
-        left: cx - rx,
-        top: cy - ry,
-        width: rx * 2,
-        height: ry * 2,
-        borderRadius: '50%',
-        background: 'repeating-linear-gradient(90deg, rgba(255,244,214,0.26) 0 12px, rgba(26,26,46,0.12) 12px 24px)',
-        backgroundSize: '48px 100%',
-        animation: 'beltFlow 1.2s linear infinite',
-        mixBlendMode: 'screen',
-        opacity: 0.42,
-        pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute',
-        left: cx - rx,
-        top: cy - ry,
-        width: rx * 2,
-        height: ry * 2,
-        border: `3px solid rgba(255,244,214,0.86)`,
-        borderRadius: '50%',
-        boxShadow: `0 0 0 3px rgba(26,26,46,0.42)`,
-        pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute',
-        left: cx - rx * 0.62,
-        top: cy - ry * 0.58,
-        width: rx * 1.24,
-        height: ry * 1.16,
-        border: `2px solid rgba(26,26,46,0.55)`,
-        borderRadius: '50%',
-        pointerEvents: 'none',
-      }} />
+      <svg
+        width={beltSize}
+        height={beltSize}
+        viewBox={`0 0 ${beltSize} ${beltSize}`}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}
+      >
+        <defs>
+          <mask id="belt-surface-mask">
+            <rect width={beltSize} height={beltSize} fill="black" />
+            <ellipse cx={cx} cy={cy} rx={beltSurfaceOuterRx} ry={beltSurfaceOuterRy} fill="white" />
+            <ellipse cx={cx} cy={cy} rx={beltSurfaceInnerRx} ry={beltSurfaceInnerRy} fill="black" />
+          </mask>
+          <pattern id="belt-surface-pixels" width="10" height="10" patternUnits="userSpaceOnUse">
+            <rect width="10" height="10" fill="#d39a55" />
+            <path d="M 0 9 L 10 0" stroke="#c98f4d" strokeWidth="1" opacity="0.18" />
+            <rect x="1" y="1" width="1" height="1" fill="#e1ac67" opacity="0.42" />
+            <rect x="7" y="6" width="1" height="1" fill="#bd8146" opacity="0.32" />
+          </pattern>
+        </defs>
+        <rect
+          width={beltSize}
+          height={beltSize}
+          fill="url(#belt-surface-pixels)"
+          mask="url(#belt-surface-mask)"
+        />
+      </svg>
       {/* 접시와 앨범커버는 같은 motion path를 따라 이동하되 비율은 고정 */}
       <div style={{
         position: 'absolute',
         inset: 0,
+        zIndex: 2,
       }}>
         {plates.map((song, i) => (
           (() => {

@@ -19,6 +19,7 @@ create table if not exists public.songs (
   scene text not null,
   lyric text,
   spotify_track_id text,
+  spotify_preview_url text,
   recommender_name text,
   recommender_age integer,
   recommender_city text,

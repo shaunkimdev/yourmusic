@@ -143,12 +143,135 @@ function mapSong(row: any) {
     scene: row.scene,
     lyric: row.lyric,
     spotifyTrackId: row.spotify_track_id || '',
+    spotifyPreviewUrl: row.spotify_preview_url || '',
     recommender: {
       name: row.recommender_name || '',
       age: row.recommender_age || '',
       city: row.recommender_city || '',
     },
   };
+}
+
+function fallbackCoverImage(artist: string, title: string) {
+  const seed = encodeURIComponent(`${artist || 'unknown'}-${title || 'untitled'}`.toLowerCase().replace(/\s+/g, '-'));
+  return `https://picsum.photos/seed/${seed}/640/640`;
+}
+
+async function getSpotifyAccessToken() {
+  const clientId = Deno.env.get('SPOTIFY_CLIENT_ID');
+  const clientSecret = Deno.env.get('SPOTIFY_CLIENT_SECRET');
+  if (!clientId || !clientSecret) return null;
+
+  const response = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ grant_type: 'client_credentials' }),
+  });
+
+  if (!response.ok) return null;
+  const data = await response.json();
+  return typeof data.access_token === 'string' ? data.access_token : null;
+}
+
+async function searchSpotifyTrack(artist: string, title: string) {
+  const token = await getSpotifyAccessToken().catch(() => null);
+  if (!token) return null;
+
+  const cleanArtist = String(artist || '').trim();
+  const cleanTitle = String(title || '').trim();
+  const market = Deno.env.get('SPOTIFY_MARKET') || 'KR';
+  const queries = [
+    cleanArtist && cleanTitle ? `track:"${cleanTitle}" artist:"${cleanArtist}"` : '',
+    cleanArtist && cleanTitle ? `${cleanArtist} ${cleanTitle}` : '',
+    cleanTitle ? `track:"${cleanTitle}"` : '',
+    cleanTitle,
+    cleanArtist,
+  ].filter((query, index, items): query is string => Boolean(query) && items.indexOf(query) === index);
+
+  for (const query of queries) {
+    const url = new URL('https://api.spotify.com/v1/search');
+    url.searchParams.set('q', query);
+    url.searchParams.set('type', 'track');
+    url.searchParams.set('limit', '5');
+    url.searchParams.set('market', market);
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) continue;
+
+    const data = await response.json();
+    const items = data.tracks?.items || [];
+    const track = items.find((item: any) => item?.preview_url) || items[0];
+    if (track?.id) {
+      const image = track.album?.images?.[0]?.url || track.album?.images?.[1]?.url || '';
+      return {
+        spotifyTrackId: track.id,
+        spotifyPreviewUrl: track.preview_url || '',
+        coverImage: image,
+      };
+    }
+  }
+
+  return null;
+}
+
+async function searchItunesMetadata(artist: string, title: string) {
+  const term = [artist, title].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+  if (!term) return null;
+
+  const url = new URL('https://itunes.apple.com/search');
+  url.searchParams.set('term', term);
+  url.searchParams.set('entity', 'song');
+  url.searchParams.set('limit', '1');
+
+  const response = await fetch(url).catch(() => null);
+  if (!response || !response.ok) return null;
+
+  const data = await response.json().catch(() => null);
+  const item = data?.results?.find((result: any) => result?.previewUrl) || data?.results?.[0];
+  const artwork = item?.artworkUrl100;
+  return {
+    previewUrl: typeof item?.previewUrl === 'string' ? item.previewUrl : '',
+    coverImage: typeof artwork === 'string' ? artwork.replace('100x100bb', '600x600bb') : '',
+  };
+}
+
+async function lookupSongMetadata(artist: string, title: string) {
+  const spotify = await searchSpotifyTrack(artist, title).catch(() => null);
+  const itunes = await searchItunesMetadata(artist, title).catch(() => null);
+
+  return {
+    spotifyTrackId: spotify?.spotifyTrackId || '',
+    spotifyPreviewUrl: spotify?.spotifyPreviewUrl || itunes?.previewUrl || '',
+    coverImage: spotify?.coverImage || itunes?.coverImage || fallbackCoverImage(artist, title),
+  };
+}
+
+async function enrichSongMetadata(supabase: any, song: any) {
+  if (song.cover_image && song.spotify_track_id && song.spotify_preview_url) return song;
+
+  const metadata = await lookupSongMetadata(song.artist || '', song.title || '');
+  const patch: Record<string, string> = {};
+  if (!song.cover_image && metadata.coverImage) patch.cover_image = metadata.coverImage;
+  if (!song.spotify_track_id && metadata.spotifyTrackId) patch.spotify_track_id = metadata.spotifyTrackId;
+  if (!song.spotify_preview_url && metadata.spotifyPreviewUrl) patch.spotify_preview_url = metadata.spotifyPreviewUrl;
+
+  if (Object.keys(patch).length === 0) return song;
+
+  const { data } = await supabase
+    .from('songs')
+    .update(patch)
+    .eq('id', song.id)
+    .select(
+      'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,spotify_track_id,spotify_preview_url,recommender_name,recommender_age,recommender_city,created_at',
+    )
+    .single();
+
+  return data || { ...song, ...patch };
 }
 
 function shuffle<T>(items: T[]) {
@@ -178,7 +301,7 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from('songs')
         .select(
-          'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,spotify_track_id,recommender_name,recommender_age,recommender_city,created_at',
+          'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,spotify_track_id,spotify_preview_url,recommender_name,recommender_age,recommender_city,created_at',
         )
         .eq('status', 'active')
         .eq('mood_key', moodKey)
@@ -193,11 +316,15 @@ Deno.serve(async (req) => {
       }
     }
 
+    const enrichedSongs = await Promise.all(
+      picked.slice(0, limit).map((song) => enrichSongMetadata(supabase, song).catch(() => song)),
+    );
+
     return json({
       moodKey: classification.moodKey,
       confidence: classification.confidence,
       source: classification.source,
-      songs: picked.slice(0, limit).map(mapSong),
+      songs: enrichedSongs.map(mapSong),
     });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);

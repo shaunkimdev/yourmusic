@@ -132,6 +132,105 @@ function isValidContact(type: string, value: string) {
   return value.length >= 2;
 }
 
+function fallbackCoverImage(artist: string, title: string) {
+  const seed = encodeURIComponent(`${artist || 'unknown'}-${title || 'untitled'}`.toLowerCase().replace(/\s+/g, '-'));
+  return `https://picsum.photos/seed/${seed}/640/640`;
+}
+
+async function getSpotifyAccessToken() {
+  const clientId = Deno.env.get('SPOTIFY_CLIENT_ID');
+  const clientSecret = Deno.env.get('SPOTIFY_CLIENT_SECRET');
+  if (!clientId || !clientSecret) return null;
+
+  const response = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ grant_type: 'client_credentials' }),
+  });
+
+  if (!response.ok) return null;
+  const data = await response.json();
+  return typeof data.access_token === 'string' ? data.access_token : null;
+}
+
+async function searchSpotifyTrack(artist: string, title: string) {
+  const token = await getSpotifyAccessToken().catch(() => null);
+  if (!token) return null;
+
+  const cleanArtist = clean(artist);
+  const cleanTitle = clean(title);
+  const market = Deno.env.get('SPOTIFY_MARKET') || 'KR';
+  const queries = [
+    cleanArtist && cleanTitle ? `track:"${cleanTitle}" artist:"${cleanArtist}"` : '',
+    cleanArtist && cleanTitle ? `${cleanArtist} ${cleanTitle}` : '',
+    cleanTitle ? `track:"${cleanTitle}"` : '',
+    cleanTitle,
+    cleanArtist,
+  ].filter((query, index, items): query is string => Boolean(query) && items.indexOf(query) === index);
+
+  for (const query of queries) {
+    const url = new URL('https://api.spotify.com/v1/search');
+    url.searchParams.set('q', query);
+    url.searchParams.set('type', 'track');
+    url.searchParams.set('limit', '5');
+    url.searchParams.set('market', market);
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) continue;
+
+    const data = await response.json();
+    const items = data.tracks?.items || [];
+    const track = items.find((item: any) => item?.preview_url) || items[0];
+    if (track?.id) {
+      const image = track.album?.images?.[0]?.url || track.album?.images?.[1]?.url || '';
+      return {
+        spotifyTrackId: track.id,
+        spotifyPreviewUrl: track.preview_url || '',
+        coverImage: image,
+      };
+    }
+  }
+
+  return null;
+}
+
+async function searchItunesMetadata(artist: string, title: string) {
+  const term = [clean(artist), clean(title)].filter(Boolean).join(' ');
+  if (!term) return null;
+
+  const url = new URL('https://itunes.apple.com/search');
+  url.searchParams.set('term', term);
+  url.searchParams.set('entity', 'song');
+  url.searchParams.set('limit', '1');
+
+  const response = await fetch(url).catch(() => null);
+  if (!response || !response.ok) return null;
+
+  const data = await response.json().catch(() => null);
+  const item = data?.results?.find((result: any) => result?.previewUrl) || data?.results?.[0];
+  const artwork = item?.artworkUrl100;
+  return {
+    previewUrl: typeof item?.previewUrl === 'string' ? item.previewUrl : '',
+    coverImage: typeof artwork === 'string' ? artwork.replace('100x100bb', '600x600bb') : '',
+  };
+}
+
+async function lookupSongMetadata(artist: string, title: string) {
+  const spotify = await searchSpotifyTrack(artist, title).catch(() => null);
+  const itunes = await searchItunesMetadata(artist, title).catch(() => null);
+
+  return {
+    spotifyTrackId: spotify?.spotifyTrackId || '',
+    spotifyPreviewUrl: spotify?.spotifyPreviewUrl || itunes?.previewUrl || '',
+    coverImage: spotify?.coverImage || itunes?.coverImage || fallbackCoverImage(artist, title),
+  };
+}
+
 function mapSong(row: any) {
   return {
     id: row.id,
@@ -144,6 +243,7 @@ function mapSong(row: any) {
     scene: row.scene,
     lyric: row.lyric,
     spotifyTrackId: row.spotify_track_id || '',
+    spotifyPreviewUrl: row.spotify_preview_url || '',
     recommender: {
       name: row.recommender_name || '',
       age: row.recommender_age || '',
@@ -176,6 +276,10 @@ Deno.serve(async (req) => {
       ruleResult.confidence < 0.72
         ? (await aiClassifyMood(`${scene} ${lyric} ${artist} ${title}`).catch(() => null)) || ruleResult
         : ruleResult;
+    const metadata = await lookupSongMetadata(artist, title);
+    const coverImage = metadata.coverImage || clean(body.coverImage) || fallbackCoverImage(artist, title);
+    const spotifyTrackId = metadata.spotifyTrackId || clean(body.spotifyTrackId);
+    const spotifyPreviewUrl = metadata.spotifyPreviewUrl || clean(body.spotifyPreviewUrl);
 
     const supabase = createClient(
       getRequiredEnv('PROJECT_URL', 'SUPABASE_URL'),
@@ -188,12 +292,13 @@ Deno.serve(async (req) => {
         artist: artist || 'Unknown Artist',
         title: title || 'Untitled',
         cover: body.cover || '🎵',
-        cover_image: body.coverImage || null,
+        cover_image: coverImage || null,
         cover_color: body.coverColor || '#C084FC',
         mood_key: classification.moodKey,
         scene,
         lyric: lyric || null,
-        spotify_track_id: clean(body.spotifyTrackId),
+        spotify_track_id: spotifyTrackId,
+        spotify_preview_url: spotifyPreviewUrl,
         recommender_name: clean(body.recommender?.name) || null,
         recommender_age: clean(body.recommender?.age) ? Number(clean(body.recommender?.age)) : null,
         recommender_city: clean(body.recommender?.city) || null,
@@ -201,7 +306,7 @@ Deno.serve(async (req) => {
         source: 'user',
       })
       .select(
-        'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,spotify_track_id,recommender_name,recommender_age,recommender_city',
+        'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,spotify_track_id,spotify_preview_url,recommender_name,recommender_age,recommender_city',
       )
       .single();
 
