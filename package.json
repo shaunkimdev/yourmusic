@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "build": "node scripts/build-static.js",
+    "deploy": "npm run build && npx wrangler deploy",
+    "preview": "npm run build && npx wrangler dev"
+  },
   "devDependencies": {
     "supabase": "^2.98.0"
   }

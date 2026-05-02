@@ -2,3 +2,5 @@
 *:Zone.Identifier
 node_modules/
 supabase/.temp/
+dist/
+.wrangler/
