@@ -263,10 +263,6 @@ function SushiBelt({ plates, onPlateClick, onActiveSongChange, radius = 110, pla
   const cy = beltSize * 0.45;
   const rx = beltSize * 0.383;
   const ry = beltSize * 0.183;
-  const beltSurfaceOuterRx = beltSize * 0.435;
-  const beltSurfaceOuterRy = beltSize * 0.225;
-  const beltSurfaceInnerRx = beltSize * 0.29;
-  const beltSurfaceInnerRy = beltSize * 0.115;
   const duration = 60;
   const orbitPath = [
     `M ${cx - rx} ${cy}`,
@@ -325,43 +321,10 @@ function SushiBelt({ plates, onPlateClick, onActiveSongChange, radius = 110, pla
       overflow: 'hidden',
       imageRendering: 'pixelated',
     }}>
-      <svg
-        width={beltSize}
-        height={beltSize}
-        viewBox={`0 0 ${beltSize} ${beltSize}`}
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 1,
-          pointerEvents: 'none',
-        }}
-      >
-        <defs>
-          <mask id="belt-surface-mask">
-            <rect width={beltSize} height={beltSize} fill="black" />
-            <ellipse cx={cx} cy={cy} rx={beltSurfaceOuterRx} ry={beltSurfaceOuterRy} fill="white" />
-            <ellipse cx={cx} cy={cy} rx={beltSurfaceInnerRx} ry={beltSurfaceInnerRy} fill="black" />
-          </mask>
-          <pattern id="belt-surface-pixels" width="10" height="10" patternUnits="userSpaceOnUse">
-            <rect width="10" height="10" fill="#d39a55" />
-            <path d="M 0 9 L 10 0" stroke="#c98f4d" strokeWidth="1" opacity="0.18" />
-            <rect x="1" y="1" width="1" height="1" fill="#e1ac67" opacity="0.42" />
-            <rect x="7" y="6" width="1" height="1" fill="#bd8146" opacity="0.32" />
-          </pattern>
-        </defs>
-        <rect
-          width={beltSize}
-          height={beltSize}
-          fill="url(#belt-surface-pixels)"
-          mask="url(#belt-surface-mask)"
-        />
-      </svg>
       {/* 접시와 앨범커버는 같은 motion path를 따라 이동하되 비율은 고정 */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        zIndex: 2,
       }}>
         {plates.map((song, i) => (
           (() => {
