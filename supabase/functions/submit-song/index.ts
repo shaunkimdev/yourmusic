@@ -265,11 +265,12 @@ Deno.serve(async (req) => {
     const contactType = clean(body.contact?.type);
     const contactValue = clean(body.contact?.value);
     const privacyAgreed = body.privacyAgreed === true;
+    const hasContact = Boolean(contactValue);
 
     if (!artist && !title) return json({ error: 'artist_or_title_required' }, 400);
     if (!scene) return json({ error: 'scene_required' }, 400);
-    if (!privacyAgreed) return json({ error: 'privacy_required' }, 400);
-    if (!isValidContact(contactType, contactValue)) return json({ error: 'invalid_contact' }, 400);
+    if (hasContact && !privacyAgreed) return json({ error: 'privacy_required' }, 400);
+    if (hasContact && !isValidContact(contactType, contactValue)) return json({ error: 'invalid_contact' }, 400);
 
     const ruleResult = ruleClassifyMood(`${scene} ${lyric} ${artist} ${title}`);
     const classification =
@@ -312,14 +313,16 @@ Deno.serve(async (req) => {
 
     if (songError) throw songError;
 
-    const { error: contactError } = await supabase.from('song_contacts').insert({
-      song_id: song.id,
-      contact_type: contactType,
-      contact_value: contactValue,
-      privacy_agreed: privacyAgreed,
-    });
+    if (hasContact) {
+      const { error: contactError } = await supabase.from('song_contacts').insert({
+        song_id: song.id,
+        contact_type: contactType,
+        contact_value: contactValue,
+        privacy_agreed: privacyAgreed,
+      });
 
-    if (contactError) throw contactError;
+      if (contactError) throw contactError;
+    }
 
     return json({
       moodKey: classification.moodKey,

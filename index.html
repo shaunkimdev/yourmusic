@@ -225,13 +225,11 @@ function validateSubmission({ artist, title, matched, confirmed, scene, contactT
     nextErrors.scene = '노래와 연결된 장면이나 경험담을 적어주세요.';
   }
 
-  if (!clean(contact)) {
-    nextErrors.contact = `${CONTACT_LABELS[contactType]}를 입력해주세요.`;
-  } else if (!isValidContact(contactType, contact)) {
+  if (clean(contact) && !isValidContact(contactType, contact)) {
     nextErrors.contact = `${CONTACT_LABELS[contactType]} 형식을 확인해주세요.`;
   }
 
-  if (!privacyAgreed) {
+  if (clean(contact) && !privacyAgreed) {
     nextErrors.privacy = '경품 연락을 위한 개인정보 수집에 동의해주세요.';
   }
 
@@ -1081,7 +1079,9 @@ function FormScreen({ navigate, initialData }) {
             <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.magenta, marginBottom: 10, letterSpacing: '0.05em' }}>
               CONTACT (FOR GIFT)
             </div>
-            <div style={{ marginBottom: 8, fontSize: 11.5 }}>경품 당첨시 연락할 곳</div>
+            <div style={{ marginBottom: 8, fontSize: 11.5 }}>
+              경품 당첨시 연락할 곳 <span style={{ color: T2.inkSoft }}>(선택사항)</span>
+            </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
               {[
                 { k: 'email', l: 'EMAIL' },
@@ -1125,7 +1125,7 @@ function FormScreen({ navigate, initialData }) {
                 onChange={e => { setPrivacyAgreed(e.target.checked); clearErrors('privacy'); }}
                 style={{ marginTop: 2, width: 14, height: 14, accentColor: T2.magenta }}
               />
-              <span>경품 당첨 연락을 위해 입력한 연락처를 수집하는 데 동의합니다.</span>
+              <span>연락처를 입력한 경우, 경품 당첨 연락을 위해 해당 연락처를 수집하는 데 동의합니다.</span>
             </label>
             <ErrorText>{errors.privacy}</ErrorText>
           </Dialog>
