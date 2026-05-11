@@ -242,6 +242,7 @@ function mapSong(row: any) {
     mood: row.mood_key,
     scene: row.scene,
     lyric: row.lyric,
+    heartCount: Number(row.heart_count || 0),
     spotifyTrackId: row.spotify_track_id || '',
     spotifyPreviewUrl: row.spotify_preview_url || '',
     recommender: {
@@ -307,7 +308,7 @@ Deno.serve(async (req) => {
         source: 'user',
       })
       .select(
-        'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,spotify_track_id,spotify_preview_url,recommender_name,recommender_age,recommender_city',
+        'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,heart_count,spotify_track_id,spotify_preview_url,recommender_name,recommender_age,recommender_city',
       )
       .single();
 

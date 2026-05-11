@@ -5,6 +5,6 @@
     "preview": "npm run build && npx wrangler dev"
   },
   "devDependencies": {
-    "supabase": "^2.98.0"
+    "supabase": "^2.98.2"
   }
 }

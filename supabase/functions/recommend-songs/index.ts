@@ -19,6 +19,13 @@ const moodKeys = [
 
 type MoodKey = typeof moodKeys[number];
 
+type MoodCategory = {
+  key: MoodKey;
+  label_ko: string;
+  description: string;
+  aliases: string[];
+};
+
 const moodKeywords: Record<MoodKey, string[]> = {
   nostalgic: ['그리', '추억', '옛', '레트로', '네온', '시부야', 'nostalgic', 'retro'],
   uplifting: ['상쾌', '기분전환', '드라이브', '달리', '바람', '가벼', 'uplifting', 'drive'],
@@ -28,17 +35,6 @@ const moodKeywords: Record<MoodKey, string[]> = {
   'late-night': ['밤', '새벽', '야경', '자정', '잠', 'late night', 'midnight'],
   warm: ['따뜻', '포근', '비', '카페', '커피', '위로', 'warm', 'rain'],
   energetic: ['신나', '활기', '에너지', '운동', '출근', '빠른', 'energetic', 'energy'],
-};
-
-const fallbackMoods: Record<MoodKey, MoodKey[]> = {
-  nostalgic: ['late-night', 'melancholy', 'warm'],
-  uplifting: ['energetic', 'summer', 'romantic'],
-  melancholy: ['late-night', 'nostalgic', 'warm'],
-  summer: ['uplifting', 'romantic', 'energetic'],
-  romantic: ['warm', 'summer', 'uplifting'],
-  'late-night': ['nostalgic', 'melancholy', 'warm'],
-  warm: ['romantic', 'melancholy', 'nostalgic'],
-  energetic: ['uplifting', 'summer', 'romantic'],
 };
 
 function getRequiredEnv(...names: string[]) {
@@ -56,16 +52,21 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function ruleClassifyMood(input: string): { moodKey: MoodKey; confidence: number; source: 'rule' } {
+function ruleClassifyMood(
+  input: string,
+  allowedMoodKeys: MoodKey[] = [...moodKeys],
+): { moodKey: MoodKey; confidence: number; source: 'rule' } {
   const text = String(input || '').toLowerCase();
-  const scores = moodKeys.map((key) => ({
+  const candidateKeys = allowedMoodKeys.length ? allowedMoodKeys : [...moodKeys];
+  const scores = candidateKeys.map((key) => ({
     key,
     score: moodKeywords[key].reduce((sum, keyword) => sum + (text.includes(keyword.toLowerCase()) ? 1 : 0), 0),
   }));
   scores.sort((a, b) => b.score - a.score);
   const [best, second] = scores;
-  if (!text.trim()) return { moodKey: 'warm', confidence: 0.35, source: 'rule' };
-  if (best.score === 0) return { moodKey: 'warm', confidence: 0.4, source: 'rule' };
+  const defaultMood = candidateKeys.includes('warm') ? 'warm' : candidateKeys[0];
+  if (!text.trim()) return { moodKey: defaultMood, confidence: 0.35, source: 'rule' };
+  if (best.score === 0) return { moodKey: defaultMood, confidence: 0.4, source: 'rule' };
   const confidence = second && best.score === second.score ? 0.55 : Math.min(0.95, 0.62 + best.score * 0.12);
   return { moodKey: best.key, confidence, source: 'rule' };
 }
@@ -77,9 +78,20 @@ function getOutputText(response: any): string {
   return content?.text || '';
 }
 
-async function aiClassifyMood(input: string): Promise<{ moodKey: MoodKey; confidence: number; source: 'ai' } | null> {
+async function aiClassifyMood(
+  input: string,
+  categories: MoodCategory[],
+): Promise<{ moodKey: MoodKey; confidence: number; source: 'ai' } | null> {
   const apiKey = Deno.env.get('OPENAI_API_KEY');
   if (!apiKey || !input.trim()) return null;
+  const allowedKeys = categories.map((category) => category.key);
+  if (allowedKeys.length === 0) return null;
+  const categoryCatalog = categories
+    .map((category) => {
+      const aliases = category.aliases.length ? ` aliases: ${category.aliases.join(', ')}` : '';
+      return `- ${category.key} (${category.label_ko}): ${category.description}${aliases}`;
+    })
+    .join('\n');
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -93,11 +105,11 @@ async function aiClassifyMood(input: string): Promise<{ moodKey: MoodKey; confid
         {
           role: 'system',
           content:
-            'Classify the Korean or English user mood text into exactly one mood key for music recommendation.',
+            'Classify the Korean or English user mood text into exactly one category key from the supplied Supabase music categories. Return only a matching category key.',
         },
         {
           role: 'user',
-          content: `Mood keys: ${moodKeys.join(', ')}\nUser text: ${input}`,
+          content: `Supabase music categories:\n${categoryCatalog}\n\nUser mood text: ${input}`,
         },
       ],
       text: {
@@ -110,7 +122,7 @@ async function aiClassifyMood(input: string): Promise<{ moodKey: MoodKey; confid
             additionalProperties: false,
             required: ['mood_key', 'confidence', 'reason_ko'],
             properties: {
-              mood_key: { type: 'string', enum: moodKeys },
+              mood_key: { type: 'string', enum: allowedKeys },
               confidence: { type: 'number', minimum: 0, maximum: 1 },
               reason_ko: { type: 'string' },
             },
@@ -123,7 +135,7 @@ async function aiClassifyMood(input: string): Promise<{ moodKey: MoodKey; confid
   if (!response.ok) return null;
   const data = await response.json();
   const parsed = JSON.parse(getOutputText(data));
-  if (!moodKeys.includes(parsed.mood_key as MoodKey)) return null;
+  if (!allowedKeys.includes(parsed.mood_key as MoodKey)) return null;
   return {
     moodKey: parsed.mood_key as MoodKey,
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.7,
@@ -142,6 +154,7 @@ function mapSong(row: any) {
     mood: row.mood_key,
     scene: row.scene,
     lyric: row.lyric,
+    heartCount: Number(row.heart_count || 0),
     spotifyTrackId: row.spotify_track_id || '',
     spotifyPreviewUrl: row.spotify_preview_url || '',
     recommender: {
@@ -267,7 +280,7 @@ async function enrichSongMetadata(supabase: any, song: any) {
     .update(patch)
     .eq('id', song.id)
     .select(
-      'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,spotify_track_id,spotify_preview_url,recommender_name,recommender_age,recommender_city,created_at',
+      'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,heart_count,spotify_track_id,spotify_preview_url,recommender_name,recommender_age,recommender_city,created_at',
     )
     .single();
 
@@ -278,43 +291,51 @@ function shuffle<T>(items: T[]) {
   return [...items].sort(() => Math.random() - 0.5);
 }
 
+async function getMoodCategories(supabase: any): Promise<MoodCategory[]> {
+  const { data, error } = await supabase
+    .from('mood_categories')
+    .select('key,label_ko,description,aliases')
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+
+  return (data || [])
+    .filter((category: any) => moodKeys.includes(category.key as MoodKey))
+    .map((category: any) => ({
+      key: category.key as MoodKey,
+      label_ko: String(category.label_ko || category.key),
+      description: String(category.description || ''),
+      aliases: Array.isArray(category.aliases) ? category.aliases.map(String) : [],
+    }));
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   try {
     const { moodText = '', limit = 6 } = await req.json();
-    const ruleResult = ruleClassifyMood(moodText);
-    const classification =
-      ruleResult.confidence < 0.72 ? (await aiClassifyMood(moodText).catch(() => null)) || ruleResult : ruleResult;
-
     const supabase = createClient(
       getRequiredEnv('PROJECT_URL', 'SUPABASE_URL'),
       getRequiredEnv('PROJECT_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE_KEY'),
     );
 
-    const targetMoods = [classification.moodKey, ...fallbackMoods[classification.moodKey]];
-    const picked: any[] = [];
+    const categories = await getMoodCategories(supabase);
+    const allowedMoodKeys = categories.map((category) => category.key);
+    const ruleResult = ruleClassifyMood(moodText, allowedMoodKeys);
+    const classification = (await aiClassifyMood(moodText, categories).catch(() => null)) || ruleResult;
 
-    for (const moodKey of targetMoods) {
-      if (picked.length >= limit) break;
-      const { data, error } = await supabase
-        .from('songs')
-        .select(
-          'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,spotify_track_id,spotify_preview_url,recommender_name,recommender_age,recommender_city,created_at',
-        )
-        .eq('status', 'active')
-        .eq('mood_key', moodKey)
-        .order('created_at', { ascending: false })
-        .limit(24);
+    const { data, error } = await supabase
+      .from('songs')
+      .select(
+        'id,artist,title,cover,cover_image,cover_color,mood_key,scene,lyric,heart_count,spotify_track_id,spotify_preview_url,recommender_name,recommender_age,recommender_city,created_at',
+      )
+      .eq('status', 'active')
+      .eq('mood_key', classification.moodKey)
+      .limit(48);
 
-      if (error) throw error;
-      const existing = new Set(picked.map((song) => song.id));
-      for (const song of shuffle(data || [])) {
-        if (!existing.has(song.id)) picked.push(song);
-        if (picked.length >= limit) break;
-      }
-    }
+    if (error) throw error;
+    const picked = shuffle(data || []).slice(0, limit);
 
     const enrichedSongs = await Promise.all(
       picked.slice(0, limit).map((song) => enrichSongMetadata(supabase, song).catch(() => song)),

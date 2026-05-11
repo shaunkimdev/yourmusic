@@ -142,6 +142,53 @@ async function callYourMusicFunction(name, payload) {
   return data;
 }
 
+async function callSupabaseRpc(name, payload) {
+  if (!backendConfigured()) {
+    throw new Error('Supabase is not configured.');
+  }
+
+  const baseUrl = clean(window.YOURMUSIC_CONFIG.supabaseUrl).replace(/\/$/, '');
+  const anonKey = clean(window.YOURMUSIC_CONFIG.supabaseAnonKey);
+  const response = await fetch(`${baseUrl}/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || data.error || `${name} failed`);
+  }
+  return data;
+}
+
+function getAppShareUrl() {
+  const origin = window.location.origin;
+  const path = window.location.pathname || '/';
+  return `${origin}${path}`;
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return copied ? Promise.resolve() : Promise.reject(new Error('copy_failed'));
+}
+
 const previewLookupCache = {};
 
 async function lookupPreviewUrl(artist, title) {
@@ -197,8 +244,7 @@ function classifyLocalMood(text) {
 function localRecommendations(moodText, limit = 6) {
   const mood = classifyLocalMood(moodText);
   const primary = window.MUSIC_DATA.filter(song => song.mood === mood);
-  const rest = window.MUSIC_DATA.filter(song => song.mood !== mood);
-  return [...primary, ...rest].slice(0, limit);
+  return [...primary].sort(() => Math.random() - 0.5).slice(0, limit);
 }
 
 function isValidContact(type, value) {
@@ -508,10 +554,63 @@ function SpotifyMiniEmbed({ song }) {
 // ══════════════════════════════════════════════════════════════
 // 화면 1: 랜딩 (기분 입력 + 추천 시작)
 // ══════════════════════════════════════════════════════════════
+function PixelShareIcon({ type, size = 3 }) {
+  const patterns = {
+    kakao: [
+      '001111100',
+      '011111110',
+      '111111111',
+      '110101011',
+      '111111111',
+      '011111110',
+      '001111000',
+      '000010000',
+    ],
+    copy: [
+      '001111110',
+      '001000010',
+      '111111010',
+      '100001010',
+      '101111110',
+      '101000000',
+      '101111100',
+      '100000100',
+      '111111100',
+    ],
+  };
+  const pixels = patterns[type] || patterns.copy;
+  const color = type === 'kakao' ? '#3A2A00' : T2.ink;
+
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-grid',
+        gridTemplateColumns: `repeat(${pixels[0].length}, ${size}px)`,
+        gridTemplateRows: `repeat(${pixels.length}, ${size}px)`,
+        gap: 0,
+        flexShrink: 0,
+      }}
+    >
+      {pixels.flatMap((row, y) => row.split('').map((cell, x) => (
+        <span
+          key={`${type}-${y}-${x}`}
+          style={{
+            width: size,
+            height: size,
+            background: cell === '1' ? color : 'transparent',
+          }}
+        />
+      )))}
+    </span>
+  );
+}
+
 function HomeScreen({ navigate }) {
   const [mood, setMood] = useState('');
   const [loading, setLoading] = useState(false);
   const [recommendError, setRecommendError] = useState('');
+  const [shareMessage, setShareMessage] = useState('');
   const homeBlockStyle = {
     width: '100%',
     display: 'flex',
@@ -529,6 +628,13 @@ function HomeScreen({ navigate }) {
 
   async function startRecommendation() {
     const moodText = clean(mood);
+    if (!moodText) {
+      const message = '지금 어떤 기분인지 적어주세요.';
+      setRecommendError(message);
+      alert(message);
+      return;
+    }
+
     setLoading(true);
     setRecommendError('');
 
@@ -560,6 +666,61 @@ function HomeScreen({ navigate }) {
       });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function shareKakao() {
+    const shareUrl = getAppShareUrl();
+    const title = '도키도키송';
+    const description = '지금 기분에 어울리는 음악을 골라보세요.';
+    setShareMessage('');
+
+    try {
+      if (window.Kakao && window.Kakao.Share) {
+        window.Kakao.Share.sendDefault({
+          objectType: 'feed',
+          content: {
+            title,
+            description,
+            imageUrl: `${window.location.origin}/접시_분홍.png`,
+            link: {
+              mobileWebUrl: shareUrl,
+              webUrl: shareUrl,
+            },
+          },
+          buttons: [
+            {
+              title: '도키도키송 열기',
+              link: {
+                mobileWebUrl: shareUrl,
+                webUrl: shareUrl,
+              },
+            },
+          ],
+        });
+        setShareMessage('카톡 공유창을 열었어요.');
+        return;
+      }
+
+      if (navigator.share) {
+        await navigator.share({ title, text: description, url: shareUrl });
+        setShareMessage('공유창을 열었어요.');
+        return;
+      }
+
+      await copyToClipboard(shareUrl);
+      setShareMessage('카톡에 붙여넣을 URL을 복사했어요.');
+    } catch (error) {
+      setShareMessage('공유를 취소했거나 열 수 없었어요.');
+    }
+  }
+
+  async function copyAppUrl() {
+    try {
+      await copyToClipboard(getAppShareUrl());
+      setShareMessage('URL을 복사했어요.');
+    } catch (error) {
+      setShareMessage('URL 복사에 실패했어요.');
     }
   }
 
@@ -609,7 +770,10 @@ function HomeScreen({ navigate }) {
               </div>
               <Input
                 value={mood}
-                onChange={e => setMood(e.target.value)}
+                onChange={e => {
+                  setMood(e.target.value);
+                  if (recommendError) setRecommendError('');
+                }}
                 placeholder="예: 일요일 오후, 조금 나른한"
               />
               <div style={{ marginTop: 'auto', textAlign: 'center' }}>
@@ -645,9 +809,123 @@ function HomeScreen({ navigate }) {
             </div>
           </Dialog>
         </div>
+
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 9,
+          marginTop: 10,
+          flexShrink: 0,
+        }}>
+          <div style={{
+            fontFamily: T2.fontKr,
+            fontSize: 12,
+            fontWeight: 900,
+            lineHeight: 1,
+            textAlign: 'center',
+            color: T2.ink,
+            textShadow: `1px 1px 0 ${T2.cream}`,
+          }}>
+            공유하기
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 10,
+            marginTop: 3,
+          }}>
+            <Btn
+              color={T2.yellow}
+              textColor={T2.ink}
+              size="sm"
+              onClick={shareKakao}
+              style={{
+                width: '100%',
+                minHeight: 42,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                fontFamily: T2.fontEn,
+                fontSize: 11,
+                padding: '8px 10px',
+              }}
+            >
+              <PixelShareIcon type="kakao" size={3} />
+              KAKAO
+            </Btn>
+            <Btn
+              color={T2.paper}
+              textColor={T2.ink}
+              size="sm"
+              onClick={copyAppUrl}
+              style={{
+                width: '100%',
+                minHeight: 42,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                fontFamily: T2.fontEn,
+                fontSize: 11,
+                padding: '8px 10px',
+              }}
+            >
+              <PixelShareIcon type="copy" size={3} />
+              COPY
+            </Btn>
+          </div>
+          <div style={{
+            minHeight: 18,
+            fontFamily: T2.fontKr,
+            fontSize: 10.5,
+            lineHeight: 1.4,
+            textAlign: 'center',
+            color: T2.inkSoft,
+          }}>
+            {shareMessage}
+          </div>
+        </div>
         </div>
       </Bg>
     </div>
+  );
+}
+
+function PixelHeartIcon({ size = 4 }) {
+  const pixels = [
+    '0110110',
+    '1111111',
+    '1111111',
+    '1111111',
+    '0111110',
+    '0011100',
+    '0001000',
+  ];
+
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-grid',
+        gridTemplateColumns: `repeat(7, ${size}px)`,
+        gridTemplateRows: `repeat(7, ${size}px)`,
+        gap: 0,
+        filter: `drop-shadow(1px 1px 0 ${T2.ink})`,
+        verticalAlign: 'middle',
+      }}
+    >
+      {pixels.flatMap((row, y) => row.split('').map((cell, x) => (
+        <span
+          key={`${y}-${x}`}
+          style={{
+            width: size,
+            height: size,
+            background: cell === '1' ? T2.magenta : 'transparent',
+          }}
+        />
+      )))}
+    </span>
   );
 }
 
@@ -665,11 +943,21 @@ function BeltScreen({ navigate, initialData }) {
   const [activeSong, setActiveSong] = useState(plates[0] || null);
   const [spotifyReady, setSpotifyReady] = useState(false);
   const [spotifyAudioEnabled, setSpotifyAudioEnabled] = useState(false);
+  const [heartCounts, setHeartCounts] = useState({});
+  const [heartPending, setHeartPending] = useState({});
+  const [heartClicked, setHeartClicked] = useState(false);
+  const [heartError, setHeartError] = useState('');
   const r = activeSong && activeSong.recommender;
   const hasSpotifyTrack = Boolean(activeSong && (clean(activeSong.spotifyPreviewUrl) || clean(activeSong.spotifyTrackId)));
 
   useEffect(() => {
     setActiveSong(plates[0] || null);
+    const nextCounts = {};
+    plates.forEach(song => {
+      nextCounts[song.id] = Number(song.heartCount || 0);
+    });
+    setHeartCounts(nextCounts);
+    setHeartClicked(false);
   }, [plates]);
 
   useEffect(() => {
@@ -690,6 +978,44 @@ function BeltScreen({ navigate, initialData }) {
     window.dispatchEvent(new CustomEvent(
       spotifyAudioEnabled ? 'yourmusic-disable-spotify-auto' : 'yourmusic-enable-spotify-auto'
     ));
+  }
+
+  function getHeartCount(song) {
+    if (!song) return 0;
+    return Number(heartCounts[song.id] ?? song.heartCount ?? 0);
+  }
+
+  async function heartSong(song) {
+    if (!song || heartClicked || heartPending[song.id]) return;
+    const currentCount = getHeartCount(song);
+    const optimisticCount = currentCount + 1;
+    setHeartError('');
+    setHeartClicked(true);
+    setHeartPending(prev => ({ ...prev, [song.id]: true }));
+    setHeartCounts(prev => ({ ...prev, [song.id]: optimisticCount }));
+
+    if (!backendConfigured()) {
+      setHeartPending(prev => ({ ...prev, [song.id]: false }));
+      return;
+    }
+
+    try {
+      let result;
+      try {
+        result = await callYourMusicFunction('heart-song', { songId: song.id });
+      } catch (functionError) {
+        const rpcResult = await callSupabaseRpc('increment_song_heart', { target_song_id: song.id });
+        const row = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+        result = { heartCount: row && row.heart_count };
+      }
+      const savedCount = Number(result.heartCount || optimisticCount);
+      setHeartCounts(prev => ({ ...prev, [song.id]: savedCount }));
+    } catch (error) {
+      setHeartCounts(prev => ({ ...prev, [song.id]: currentCount }));
+      setHeartError('하트 저장에 실패했습니다.');
+    } finally {
+      setHeartPending(prev => ({ ...prev, [song.id]: false }));
+    }
   }
 
   return (
@@ -746,38 +1072,66 @@ function BeltScreen({ navigate, initialData }) {
               onPlateClick={(song) => navigate('banner', song)}
             />
             {activeSong && (
-              <div
-                key={activeSong.id}
-                onClick={() => navigate('banner', activeSong)}
-                style={{
-                  position: 'absolute',
-                  left: '50%',
-                  top: '74%',
-                  width: 144,
-                  height: 144,
-                  transform: 'translate(-50%, -50%)',
-                  background: activeSong.coverColor,
-                  border: `4px solid ${T2.ink}`,
-                  boxShadow: `5px 5px 0 ${T2.ink}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  cursor: 'pointer',
-                  zIndex: 80,
-                  animation: `featuredCoverFade ${featuredDuration} ease-in-out forwards`,
-                }}
-              >
-                {activeSong.coverImage ? (
-                  <img
-                    src={activeSong.coverImage}
-                    alt={`${activeSong.artist} - ${activeSong.title}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
-                ) : (
-                  <div style={{ fontSize: 40 }}>{activeSong.cover}</div>
-                )}
-              </div>
+              <>
+                <div
+                  key={`${activeSong.id}-heart-guide`}
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '74%',
+                    width: 286,
+                    padding: '7px 9px',
+                    transform: 'translate(-50%, -50%)',
+                    background: T2.cream,
+                    border: `3px solid ${T2.ink}`,
+                    boxShadow: `3px 3px 0 ${T2.ink}`,
+                    color: T2.ink,
+                    fontFamily: T2.fontKr,
+                    fontSize: 12,
+                    fontWeight: 900,
+                    lineHeight: 1.35,
+                    textAlign: 'center',
+                    pointerEvents: 'none',
+                    zIndex: 85,
+                    animation: `featuredCoverFade ${featuredDuration} ease-in-out forwards`,
+                  }}
+                >
+                  이 곡이 마음에 든다면<br/>
+                  아래 하트 <PixelHeartIcon size={2} />를 눌러주세요
+                </div>
+                <div
+                  key={activeSong.id}
+                  onClick={() => navigate('banner', activeSong)}
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '47%',
+                    width: 144,
+                    height: 144,
+                    transform: 'translate(-50%, -50%)',
+                    background: activeSong.coverColor,
+                    border: `4px solid ${T2.ink}`,
+                    boxShadow: `5px 5px 0 ${T2.ink}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    zIndex: 80,
+                    animation: `featuredCoverFade ${featuredDuration} ease-in-out forwards`,
+                  }}
+                >
+                  {activeSong.coverImage ? (
+                    <img
+                      src={activeSong.coverImage}
+                      alt={`${activeSong.artist} - ${activeSong.title}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  ) : (
+                    <div style={{ fontSize: 40 }}>{activeSong.cover}</div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -808,18 +1162,52 @@ function BeltScreen({ navigate, initialData }) {
                     activeSong.cover
                   )}
                 </div>
-                <div style={{ minWidth: 0 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.magenta, marginBottom: 4, letterSpacing: '0.04em' }}>
                     THIS SONG
                   </div>
-                  <div style={{ fontFamily: T2.fontEn, fontSize: 10.5, color: T2.ink, lineHeight: 1.3 }}>
-                    {activeSong.title}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <div style={{ fontFamily: T2.fontEn, fontSize: 10.5, color: T2.ink, lineHeight: 1.3, minWidth: 0, flex: 1 }}>
+                      {activeSong.title}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => heartSong(activeSong)}
+                      disabled={heartClicked || Boolean(heartPending[activeSong.id])}
+                      aria-label={heartClicked ? '하트 누름 완료' : '하트 누르기'}
+                      style={{
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        minWidth: 74,
+                        height: 34,
+                        padding: '4px 7px',
+                        background: T2.cream,
+                        border: `3px solid ${T2.ink}`,
+                        boxShadow: `2px 2px 0 ${T2.ink}`,
+                        cursor: heartClicked || heartPending[activeSong.id] ? 'default' : 'pointer',
+                        opacity: heartClicked || heartPending[activeSong.id] ? 0.78 : 1,
+                      }}
+                    >
+                      <PixelHeartIcon size={3} />
+                      <span style={{
+                        fontFamily: T2.fontEn,
+                        fontSize: 15,
+                        lineHeight: 1,
+                        color: T2.magenta,
+                        textShadow: `1px 1px 0 ${T2.ink}`,
+                      }}>
+                        {getHeartCount(activeSong)}
+                      </span>
+                    </button>
                   </div>
                   <div style={{ fontSize: 11, color: T2.inkSoft, marginTop: 3 }}>
                     ♪ {activeSong.artist}
                   </div>
                 </div>
               </div>
+              <ErrorText>{heartError}</ErrorText>
               <div style={{ fontSize: 11.5, lineHeight: 1.55, marginBottom: activeSong.lyric ? 8 : 0 }}>
                 "{activeSong.scene}"
               </div>
