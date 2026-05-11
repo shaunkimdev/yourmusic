@@ -297,12 +297,101 @@ function musicSearchQuery(song) {
 
 function musicServiceLinks(song) {
   const query = musicSearchQuery(song);
-  if (!query) return { youtubeMusic: '', melon: '' };
+  if (!query) return { youtubeMusic: '', melon: '', spotify: '' };
   const encoded = encodeURIComponent(query);
+  const spotifyTrackId = song && clean(song.spotifyTrackId);
   return {
     youtubeMusic: `https://music.youtube.com/search?q=${encoded}`,
     melon: `https://www.melon.com/search/total/index.htm?q=${encoded}`,
+    spotify: spotifyTrackId
+      ? `https://open.spotify.com/track/${encodeURIComponent(spotifyTrackId)}`
+      : `https://open.spotify.com/search/${encoded}`,
   };
+}
+
+function FullSongLinks({ song }) {
+  const links = musicServiceLinks(song);
+  if (!links.youtubeMusic && !links.spotify) return null;
+
+  const linkBaseStyle = {
+    flex: 1,
+    minHeight: 38,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    border: `3px solid ${T2.ink}`,
+    boxShadow: `2px 2px 0 ${T2.ink}`,
+    fontFamily: T2.fontEn,
+    fontSize: 10,
+    lineHeight: 1,
+    textDecoration: 'none',
+  };
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{
+        fontFamily: T2.fontKr,
+        fontSize: 11.5,
+        fontWeight: 900,
+        color: T2.ink,
+        marginBottom: 8,
+        textAlign: 'center',
+        textShadow: `1px 1px 0 ${T2.cream}`,
+      }}>
+        전체곡 들으러가기
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <a
+          href={links.youtubeMusic}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="YouTube Music에서 전체곡 찾기"
+          style={{
+            ...linkBaseStyle,
+            background: '#FF0033',
+            color: '#fff',
+          }}
+        >
+          <span style={{
+            width: 18,
+            height: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '2px solid #fff',
+            boxShadow: '1px 1px 0 #000',
+            fontSize: 8,
+          }}>▶</span>
+          YOUTUBE
+        </a>
+        <a
+          href={links.spotify}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Spotify에서 전체곡 찾기"
+          style={{
+            ...linkBaseStyle,
+            background: '#1DB954',
+            color: '#111',
+          }}
+        >
+          <span style={{
+            width: 18,
+            height: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: `2px solid ${T2.ink}`,
+            boxShadow: '1px 1px 0 #000',
+            fontSize: 8,
+            fontWeight: 900,
+          }}>S</span>
+          SPOTIFY
+        </a>
+      </div>
+    </div>
+  );
 }
 
 function SpotifyMiniEmbed({ song }) {
@@ -606,7 +695,7 @@ function PixelShareIcon({ type, size = 3 }) {
   );
 }
 
-function HomeScreen({ navigate }) {
+function HomeScreen({ navigate, resetHeartSession }) {
   const [mood, setMood] = useState('');
   const [loading, setLoading] = useState(false);
   const [recommendError, setRecommendError] = useState('');
@@ -637,6 +726,7 @@ function HomeScreen({ navigate }) {
 
     setLoading(true);
     setRecommendError('');
+    resetHeartSession();
 
     if (!backendConfigured()) {
       navigate('belt', {
@@ -932,7 +1022,7 @@ function PixelHeartIcon({ size = 4 }) {
 // ══════════════════════════════════════════════════════════════
 // 화면 2: 회전초밥 레일
 // ══════════════════════════════════════════════════════════════
-function BeltScreen({ navigate, initialData }) {
+function BeltScreen({ navigate, initialData, heartCounts, setHeartCounts, heartClicked, setHeartClicked }) {
   const plates = (initialData && Array.isArray(initialData.songs) && initialData.songs.length)
     ? initialData.songs
     : window.SUSHI_PLATES;
@@ -943,9 +1033,7 @@ function BeltScreen({ navigate, initialData }) {
   const [activeSong, setActiveSong] = useState(plates[0] || null);
   const [spotifyReady, setSpotifyReady] = useState(false);
   const [spotifyAudioEnabled, setSpotifyAudioEnabled] = useState(false);
-  const [heartCounts, setHeartCounts] = useState({});
   const [heartPending, setHeartPending] = useState({});
-  const [heartClicked, setHeartClicked] = useState(false);
   const [heartError, setHeartError] = useState('');
   const r = activeSong && activeSong.recommender;
   const hasSpotifyTrack = Boolean(activeSong && (clean(activeSong.spotifyPreviewUrl) || clean(activeSong.spotifyTrackId)));
@@ -956,8 +1044,15 @@ function BeltScreen({ navigate, initialData }) {
     plates.forEach(song => {
       nextCounts[song.id] = Number(song.heartCount || 0);
     });
-    setHeartCounts(nextCounts);
-    setHeartClicked(false);
+    setHeartCounts(prev => {
+      const mergedCounts = { ...prev };
+      Object.keys(nextCounts).forEach(id => {
+        if (mergedCounts[id] === undefined) {
+          mergedCounts[id] = nextCounts[id];
+        }
+      });
+      return mergedCounts;
+    });
   }, [plates]);
 
   useEffect(() => {
@@ -1018,6 +1113,25 @@ function BeltScreen({ navigate, initialData }) {
     }
   }
 
+  function openSongDetail(song) {
+    const currentSong = {
+      ...song,
+      heartCount: getHeartCount(song),
+    };
+    navigate('banner', {
+      song: currentSong,
+      returnTo: 'belt',
+      beltData: initialData || {
+        mood,
+        moodKey,
+        songs: plates.map(plate => ({
+          ...plate,
+          heartCount: getHeartCount(plate),
+        })),
+      },
+    });
+  }
+
   return (
     <div className="screen">
       <Bg>
@@ -1069,7 +1183,7 @@ function BeltScreen({ navigate, initialData }) {
               radius={118}
               plateSize={66}
               onActiveSongChange={setActiveSong}
-              onPlateClick={(song) => navigate('banner', song)}
+              onPlateClick={openSongDetail}
             />
             {activeSong && (
               <>
@@ -1101,7 +1215,7 @@ function BeltScreen({ navigate, initialData }) {
                 </div>
                 <div
                   key={activeSong.id}
-                  onClick={() => navigate('banner', activeSong)}
+                  onClick={() => openSongDetail(activeSong)}
                   style={{
                     position: 'absolute',
                     left: '50%',
@@ -1541,15 +1655,19 @@ function FormScreen({ navigate, initialData }) {
 // ══════════════════════════════════════════════════════════════
 // 화면 4: 음악 소개 배너
 // ══════════════════════════════════════════════════════════════
-function BannerScreen({ song, navigate }) {
+function BannerScreen({ song: bannerData, navigate, heartCounts }) {
+  const song = bannerData && bannerData.song ? bannerData.song : bannerData;
+  const returnBeltData = bannerData && bannerData.returnTo === 'belt' ? bannerData.beltData : null;
   if (!song) return null;
   const r = song.recommender;
+  const heartCount = Number(heartCounts?.[song.id] ?? song.heartCount ?? 0);
+  const backToBelt = () => navigate('belt', returnBeltData || { songs: window.SUSHI_PLATES });
 
   return (
     <div className="screen">
       <Bg>
         <SBar />
-        <TNav title="THIS SONG" subtitle="이 노래는…" onBack={() => navigate('home')} />
+        <TNav title="THIS SONG" subtitle="이 노래는…" onBack={backToBelt} />
 
         <div style={{ padding: '6px 14px 16px' }}>
 
@@ -1576,7 +1694,7 @@ function BannerScreen({ song, navigate }) {
               )}
             </div>
             <div style={{
-              fontFamily: T2.fontEn, fontSize: 14, color: '#fff',
+              fontFamily: T2.fontKr, fontSize: 15, fontWeight: 900, color: '#fff',
               textShadow: `2px 2px 0 ${T2.ink}`,
               textAlign: 'center', lineHeight: 1.3,
               marginBottom: 6,
@@ -1584,11 +1702,40 @@ function BannerScreen({ song, navigate }) {
               {song.title}
             </div>
             <div style={{
-              fontFamily: T2.fontEn, fontSize: 9, color: '#fff',
+              fontFamily: T2.fontKr, fontSize: 15, fontWeight: 900, color: '#fff',
               textShadow: `1px 1px 0 ${T2.ink}`,
-              letterSpacing: '0.1em',
+              lineHeight: 1.3,
+              textAlign: 'center',
             }}>
               ♪ {song.artist} ♪
+            </div>
+            <div
+              aria-label={`하트 ${heartCount}개`}
+              style={{
+                marginTop: 10,
+                minWidth: 82,
+                height: 34,
+                padding: '4px 9px',
+                background: T2.cream,
+                border: `3px solid ${T2.ink}`,
+                boxShadow: `2px 2px 0 ${T2.ink}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 7,
+                pointerEvents: 'none',
+              }}
+            >
+              <PixelHeartIcon size={3} />
+              <span style={{
+                fontFamily: T2.fontEn,
+                fontSize: 15,
+                lineHeight: 1,
+                color: T2.magenta,
+                textShadow: `1px 1px 0 ${T2.ink}`,
+              }}>
+                {heartCount}
+              </span>
             </div>
           </div>
 
@@ -1599,6 +1746,8 @@ function BannerScreen({ song, navigate }) {
                 ♥ THE SCENE
               </div>
               "{song.scene}"
+              <SpotifyMiniEmbed song={song} />
+              <FullSongLinks song={song} />
             </Dialog>
           </div>
 
@@ -1632,14 +1781,14 @@ function BannerScreen({ song, navigate }) {
             </div>
           )}
 
-          {/* 다른 노래 보기 */}
+          {/* 노래 고르기로 돌아가기 */}
           <Btn
             color={T2.magenta}
             size="lg"
-            onClick={() => navigate('home')}
-            style={{ width: '100%' }}
+            onClick={backToBelt}
+            style={{ width: '100%', fontFamily: T2.fontKr, fontSize: 14 }}
           >
-            ◀ ANOTHER PLATE
+            ◀ 되돌아가기
           </Btn>
 
           <div style={{ height: 16 }} />
@@ -1655,6 +1804,13 @@ function BannerScreen({ song, navigate }) {
 function App() {
   const [screen, setScreen] = useState('home');
   const [data, setData] = useState(null);
+  const [heartCounts, setHeartCounts] = useState({});
+  const [heartClicked, setHeartClicked] = useState(false);
+
+  function resetHeartSession() {
+    setHeartCounts({});
+    setHeartClicked(false);
+  }
 
   function navigate(to, payload) {
     setScreen(to);
@@ -1667,10 +1823,17 @@ function App() {
   }
 
   const screens = {
-    home:   <HomeScreen navigate={navigate} />,
-    belt:   <BeltScreen navigate={navigate} initialData={data} />,
+    home:   <HomeScreen navigate={navigate} resetHeartSession={resetHeartSession} />,
+    belt:   <BeltScreen
+      navigate={navigate}
+      initialData={data}
+      heartCounts={heartCounts}
+      setHeartCounts={setHeartCounts}
+      heartClicked={heartClicked}
+      setHeartClicked={setHeartClicked}
+    />,
     form:   <FormScreen navigate={navigate} initialData={data} />,
-    banner: <BannerScreen navigate={navigate} song={data} />,
+    banner: <BannerScreen navigate={navigate} song={data} heartCounts={heartCounts} />,
   };
 
   return <div className="phone">{screens[screen] || screens.home}</div>;
