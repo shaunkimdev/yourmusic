@@ -282,6 +282,31 @@ function validateSubmission({ artist, title, matched, confirmed, scene, contactT
   return nextErrors;
 }
 
+function normalizeSongCandidate(song, fallbackIndex = 0) {
+  const artist = clean(song && song.artist);
+  const title = clean(song && song.title);
+  if (!artist && !title) return null;
+
+  return {
+    id: clean(song && song.id) || clean(song && song.spotifyTrackId) || `song-${fallbackIndex}`,
+    artist: artist || 'Unknown Artist',
+    title: title || 'Untitled',
+    cover: clean(song && song.cover) || '🎵',
+    coverImage: clean(song && (song.coverImage || song.cover_image)),
+    coverColor: clean(song && (song.coverColor || song.cover_color)) || T2.lavender,
+    spotifyTrackId: clean(song && (song.spotifyTrackId || song.spotify_track_id)),
+    spotifyPreviewUrl: clean(song && (song.spotifyPreviewUrl || song.spotify_preview_url)),
+    source: clean(song && song.source),
+    album: clean(song && song.album),
+  };
+}
+
+function localSongSearch(artist, title) {
+  return window.findSongs({ artist, title })
+    .map((song, index) => normalizeSongCandidate(song, index))
+    .filter(Boolean);
+}
+
 function ErrorText({ children }) {
   if (!children) return null;
   return (
@@ -1366,6 +1391,9 @@ function FormScreen({ navigate, initialData }) {
   const [title, setTitle] = useState('');
   const [matched, setMatched] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [songResults, setSongResults] = useState([]);
+  const [songSearchNote, setSongSearchNote] = useState('');
+  const [songSearchLoading, setSongSearchLoading] = useState(false);
   const [scene, setScene] = useState('');
   const [lyric, setLyric] = useState('');
   const [name, setName] = useState('');
@@ -1385,17 +1413,60 @@ function FormScreen({ navigate, initialData }) {
     });
   }
 
-  // 가수/제목 입력 시 mock 데이터에서 찾기
-  useEffect(() => {
-    if (artist.length >= 2 || title.length >= 2) {
-      const results = window.findSongs({ artist, title });
-      setMatched(results[0] || null);
-      setConfirmed(false);
-    } else {
-      setMatched(null);
-      setConfirmed(false);
+  function resetSongChoice() {
+    setMatched(null);
+    setConfirmed(false);
+    setSongResults([]);
+    setSongSearchNote('');
+  }
+
+  async function searchSong() {
+    const cleanArtist = clean(artist);
+    const cleanTitle = clean(title);
+    clearErrors('song', 'confirmed');
+
+    if (!cleanArtist && !cleanTitle) {
+      setErrors(current => ({ ...current, song: '가수 또는 노래 제목 중 하나는 입력해주세요.' }));
+      return;
     }
-  }, [artist, title]);
+
+    setMatched(null);
+    setConfirmed(false);
+    setSongSearchLoading(true);
+    setSongSearchNote('');
+
+    try {
+      let results = [];
+      let note = '';
+
+      if (backendConfigured()) {
+        const result = await callYourMusicFunction('search-song', {
+          artist: cleanArtist,
+          title: cleanTitle,
+          limit: 8,
+        });
+        results = (Array.isArray(result.songs) ? result.songs : [])
+          .map((song, index) => normalizeSongCandidate(song, index))
+          .filter(Boolean);
+        if (result.usedAiRewrite) note = '한국어 발음 입력을 검색어 후보로 바꿔서 찾아봤어요.';
+      } else {
+        results = localSongSearch(cleanArtist, cleanTitle);
+      }
+
+      setSongResults(results);
+      setSongSearchNote(results.length ? note : '일치하는 노래를 찾지 못했어요. 직접 입력한 정보로 제출할 수 있어요.');
+    } catch (error) {
+      const fallback = localSongSearch(cleanArtist, cleanTitle);
+      setSongResults(fallback);
+      setSongSearchNote(
+        fallback.length
+          ? '검색 서버 연결에 실패해서 로컬 후보를 보여드릴게요.'
+          : '검색 서버 연결에 실패했어요. 직접 입력한 정보로 제출할 수 있어요.'
+      );
+    } finally {
+      setSongSearchLoading(false);
+    }
+  }
 
   async function submit() {
     const nextErrors = validateSubmission({
@@ -1477,17 +1548,97 @@ function FormScreen({ navigate, initialData }) {
             <div style={{ marginBottom: 6, fontSize: 11, color: T2.inkSoft }}>가수</div>
             <Input
               value={artist}
-              onChange={e => { setArtist(e.target.value); clearErrors('song', 'confirmed'); }}
-              placeholder="예: Mariya Takeuchi"
+              onChange={e => { setArtist(e.target.value); clearErrors('song', 'confirmed'); resetSongChoice(); }}
+              placeholder="예: 키스오브라이프 / KISS OF LIFE"
             />
             <div style={{ marginTop: 10, marginBottom: 6, fontSize: 11, color: T2.inkSoft }}>노래 제목</div>
             <Input
               value={title}
-              onChange={e => { setTitle(e.target.value); clearErrors('song', 'confirmed'); }}
-              placeholder="예: Plastic Love"
+              onChange={e => { setTitle(e.target.value); clearErrors('song', 'confirmed'); resetSongChoice(); }}
+              placeholder="예: 스티키 / Sticky"
             />
+            <Btn
+              color={T2.magenta}
+              size="sm"
+              onClick={searchSong}
+              disabled={songSearchLoading}
+              style={{ width: '100%', marginTop: 12 }}
+            >
+              {songSearchLoading ? 'SEARCHING...' : 'SEARCH'}
+            </Btn>
             <ErrorText>{errors.song}</ErrorText>
+            {songSearchNote && (
+              <div style={{ marginTop: 8, fontSize: 10.5, color: T2.inkSoft, lineHeight: 1.45 }}>
+                {songSearchNote}
+              </div>
+            )}
           </Dialog>
+
+          {songResults.length > 0 && (
+            <Dialog color={T2.paper}>
+              <div style={{ fontFamily: T2.fontEn, fontSize: 9, color: T2.skyblue, marginBottom: 10, letterSpacing: '0.05em' }}>
+                CHOOSE SONG
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {songResults.map((song, index) => {
+                  const selected = matched && matched.id === song.id;
+                  return (
+                    <button
+                      key={`${song.id}-${index}`}
+                      type="button"
+                      onClick={() => {
+                        setMatched(song);
+                        setConfirmed(false);
+                        clearErrors('confirmed');
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        width: '100%',
+                        minHeight: 58,
+                        padding: 8,
+                        background: selected ? T2.cream : T2.paper,
+                        border: `3px solid ${selected ? T2.magenta : T2.ink}`,
+                        boxShadow: `2px 2px 0 ${T2.ink}`,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        fontFamily: T2.fontKr,
+                      }}
+                    >
+                      <div style={{
+                        width: 42,
+                        height: 42,
+                        flexShrink: 0,
+                        background: song.coverColor,
+                        border: `2px solid ${T2.ink}`,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20,
+                      }}>
+                        {song.coverImage ? (
+                          <img src={song.coverImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : song.cover}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: T2.fontEn, fontSize: 10, color: T2.ink, lineHeight: 1.35, wordBreak: 'break-word' }}>
+                          {song.title}
+                        </div>
+                        <div style={{ fontSize: 10.5, color: T2.inkSoft, lineHeight: 1.35, marginTop: 2 }}>
+                          {song.artist}
+                        </div>
+                      </div>
+                      <div style={{ fontFamily: T2.fontEn, fontSize: 8.5, color: selected ? T2.magenta : T2.inkSoft }}>
+                        {selected ? 'PICKED' : 'PICK'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Dialog>
+          )}
 
           {/* 미리보기 + 확인 */}
           {matched && (

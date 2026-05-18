@@ -107,7 +107,7 @@ function PixelDialog({ children, color = T.paper, textColor = T.ink, blinkArrow 
 }
 
 // ── Pixel Button ─────────────────────────────────────────────
-function PixelButton({ children, onClick, color = T.magenta, textColor = '#fff', size = 'md', style }) {
+function PixelButton({ children, onClick, color = T.magenta, textColor = '#fff', size = 'md', style, disabled = false }) {
   const sizes = {
     sm: { padding: '8px 14px', fontSize: 11 },
     md: { padding: '12px 18px', fontSize: 13 },
@@ -117,11 +117,13 @@ function PixelButton({ children, onClick, color = T.magenta, textColor = '#fff',
   const offset = pressed ? 0 : 4;
   return (
     <button
+      type="button"
       onClick={onClick}
-      onMouseDown={() => setPressed(true)}
+      disabled={disabled}
+      onMouseDown={() => !disabled && setPressed(true)}
       onMouseUp={() => setPressed(false)}
       onMouseLeave={() => setPressed(false)}
-      onTouchStart={() => setPressed(true)}
+      onTouchStart={() => !disabled && setPressed(true)}
       onTouchEnd={() => setPressed(false)}
       style={{
         background: color, color: textColor,
@@ -129,7 +131,8 @@ function PixelButton({ children, onClick, color = T.magenta, textColor = '#fff',
         boxShadow: `${offset}px ${offset}px 0 ${T.ink}`,
         transform: pressed ? 'translate(4px, 4px)' : 'translate(0,0)',
         fontFamily: T.fontEn, fontWeight: 'normal',
-        cursor: 'pointer', letterSpacing: '0.04em',
+        cursor: disabled ? 'default' : 'pointer', letterSpacing: '0.04em',
+        opacity: disabled ? 0.6 : 1,
         transition: 'transform 0.05s, box-shadow 0.05s',
         ...sizes[size],
         ...style,

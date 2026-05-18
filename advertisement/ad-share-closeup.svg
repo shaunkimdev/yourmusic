@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+  <defs>
+    <linearGradient id="citypop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF6B9D"/>
+      <stop offset="50%" stop-color="#C084FC"/>
+      <stop offset="100%" stop-color="#7DD3FC"/>
+    </linearGradient>
+    <linearGradient id="night" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A1A2E"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#00D4FF"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="8" dy="8" stdDeviation="0" flood-color="#1A1A2E" flood-opacity="1"/>
+    </filter>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#citypop)"/>
+  
+  <rect width="1080" height="1080" fill="url(#citypop)"/>
+  <text x="540" y="135" text-anchor="middle" font-family="'Galmuri11','Apple SD Gothic Neo','Noto Sans KR',monospace" font-size="60" font-weight="900" fill="#FFFFFF" letter-spacing="0">친구에게 바로 공유</text>
+  <text x="540" y="205" text-anchor="middle" font-family="'Galmuri11','Apple SD Gothic Neo','Noto Sans KR',monospace" font-size="36" font-weight="900" fill="#FFF4D6" letter-spacing="0">카톡 공유와 URL 복사까지</text>
+  <g>
+    <rect x="158" y="358" width="780" height="330" fill="#1A1A2E"/>
+    <rect x="150" y="350" width="780" height="330" fill="#FFFFFF" stroke="#1A1A2E" stroke-width="8"/>
+    <rect x="162" y="362" width="756" height="306" fill="none" stroke="#1A1A2E" stroke-width="2"/>
+    
+    <text x="540" y="420" text-anchor="middle" font-family="'Galmuri11','Apple SD Gothic Neo','Noto Sans KR',monospace" font-size="44" font-weight="900" fill="#1A1A2E" letter-spacing="0">공유하기</text>
+    <g>
+    <rect x="238" y="498" width="280" height="92" fill="#1A1A2E"/>
+    <rect x="230" y="490" width="280" height="92" fill="#FCD34D" stroke="#1A1A2E" stroke-width="6"/>
+    <g><rect x="284" y="518" width="7" height="7" fill="#3A2A00"/><rect x="291" y="518" width="7" height="7" fill="#3A2A00"/><rect x="298" y="518" width="7" height="7" fill="#3A2A00"/><rect x="305" y="518" width="7" height="7" fill="#3A2A00"/><rect x="312" y="518" width="7" height="7" fill="#3A2A00"/><rect x="277" y="525" width="7" height="7" fill="#3A2A00"/><rect x="284" y="525" width="7" height="7" fill="#3A2A00"/><rect x="291" y="525" width="7" height="7" fill="#3A2A00"/><rect x="298" y="525" width="7" height="7" fill="#3A2A00"/><rect x="305" y="525" width="7" height="7" fill="#3A2A00"/><rect x="312" y="525" width="7" height="7" fill="#3A2A00"/><rect x="319" y="525" width="7" height="7" fill="#3A2A00"/><rect x="270" y="532" width="7" height="7" fill="#3A2A00"/><rect x="277" y="532" width="7" height="7" fill="#3A2A00"/><rect x="284" y="532" width="7" height="7" fill="#3A2A00"/><rect x="291" y="532" width="7" height="7" fill="#3A2A00"/><rect x="298" y="532" width="7" height="7" fill="#3A2A00"/><rect x="305" y="532" width="7" height="7" fill="#3A2A00"/><rect x="312" y="532" width="7" height="7" fill="#3A2A00"/><rect x="319" y="532" width="7" height="7" fill="#3A2A00"/><rect x="326" y="532" width="7" height="7" fill="#3A2A00"/><rect x="270" y="539" width="7" height="7" fill="#3A2A00"/><rect x="277" y="539" width="7" height="7" fill="#3A2A00"/><rect x="291" y="539" width="7" height="7" fill="#3A2A00"/><rect x="305" y="539" width="7" height="7" fill="#3A2A00"/><rect x="319" y="539" width="7" height="7" fill="#3A2A00"/><rect x="326" y="539" width="7" height="7" fill="#3A2A00"/><rect x="270" y="546" width="7" height="7" fill="#3A2A00"/><rect x="277" y="546" width="7" height="7" fill="#3A2A00"/><rect x="284" y="546" width="7" height="7" fill="#3A2A00"/><rect x="291" y="546" width="7" height="7" fill="#3A2A00"/><rect x="298" y="546" width="7" height="7" fill="#3A2A00"/><rect x="305" y="546" width="7" height="7" fill="#3A2A00"/><rect x="312" y="546" width="7" height="7" fill="#3A2A00"/><rect x="319" y="546" width="7" height="7" fill="#3A2A00"/><rect x="326" y="546" width="7" height="7" fill="#3A2A00"/><rect x="277" y="553" width="7" height="7" fill="#3A2A00"/><rect x="284" y="553" width="7" height="7" fill="#3A2A00"/><rect x="291" y="553" width="7" height="7" fill="#3A2A00"/><rect x="298" y="553" width="7" height="7" fill="#3A2A00"/><rect x="305" y="553" width="7" height="7" fill="#3A2A00"/><rect x="312" y="553" width="7" height="7" fill="#3A2A00"/><rect x="319" y="553" width="7" height="7" fill="#3A2A00"/><rect x="284" y="560" width="7" height="7" fill="#3A2A00"/><rect x="291" y="560" width="7" height="7" fill="#3A2A00"/><rect x="298" y="560" width="7" height="7" fill="#3A2A00"/><rect x="305" y="560" width="7" height="7" fill="#3A2A00"/><rect x="298" y="567" width="7" height="7" fill="#3A2A00"/></g>
+    <text x="392" y="545" text-anchor="middle" font-family="'Press Start 2P','Galmuri11',monospace" font-size="22" font-weight="900" fill="#1A1A2E" letter-spacing="0">KAKAO</text>
+  </g>
+    <g>
+    <rect x="578" y="498" width="280" height="92" fill="#1A1A2E"/>
+    <rect x="570" y="490" width="280" height="92" fill="#FFFFFF" stroke="#1A1A2E" stroke-width="6"/>
+    <g><rect x="629" y="512" width="7" height="7" fill="#1A1A2E"/><rect x="636" y="512" width="7" height="7" fill="#1A1A2E"/><rect x="643" y="512" width="7" height="7" fill="#1A1A2E"/><rect x="650" y="512" width="7" height="7" fill="#1A1A2E"/><rect x="657" y="512" width="7" height="7" fill="#1A1A2E"/><rect x="664" y="512" width="7" height="7" fill="#1A1A2E"/><rect x="629" y="519" width="7" height="7" fill="#1A1A2E"/><rect x="664" y="519" width="7" height="7" fill="#1A1A2E"/><rect x="615" y="526" width="7" height="7" fill="#1A1A2E"/><rect x="622" y="526" width="7" height="7" fill="#1A1A2E"/><rect x="629" y="526" width="7" height="7" fill="#1A1A2E"/><rect x="636" y="526" width="7" height="7" fill="#1A1A2E"/><rect x="643" y="526" width="7" height="7" fill="#1A1A2E"/><rect x="650" y="526" width="7" height="7" fill="#1A1A2E"/><rect x="664" y="526" width="7" height="7" fill="#1A1A2E"/><rect x="615" y="533" width="7" height="7" fill="#1A1A2E"/><rect x="650" y="533" width="7" height="7" fill="#1A1A2E"/><rect x="664" y="533" width="7" height="7" fill="#1A1A2E"/><rect x="615" y="540" width="7" height="7" fill="#1A1A2E"/><rect x="629" y="540" width="7" height="7" fill="#1A1A2E"/><rect x="636" y="540" width="7" height="7" fill="#1A1A2E"/><rect x="643" y="540" width="7" height="7" fill="#1A1A2E"/><rect x="650" y="540" width="7" height="7" fill="#1A1A2E"/><rect x="657" y="540" width="7" height="7" fill="#1A1A2E"/><rect x="664" y="540" width="7" height="7" fill="#1A1A2E"/><rect x="615" y="547" width="7" height="7" fill="#1A1A2E"/><rect x="629" y="547" width="7" height="7" fill="#1A1A2E"/><rect x="615" y="554" width="7" height="7" fill="#1A1A2E"/><rect x="629" y="554" width="7" height="7" fill="#1A1A2E"/><rect x="636" y="554" width="7" height="7" fill="#1A1A2E"/><rect x="643" y="554" width="7" height="7" fill="#1A1A2E"/><rect x="650" y="554" width="7" height="7" fill="#1A1A2E"/><rect x="657" y="554" width="7" height="7" fill="#1A1A2E"/><rect x="615" y="561" width="7" height="7" fill="#1A1A2E"/><rect x="657" y="561" width="7" height="7" fill="#1A1A2E"/><rect x="615" y="568" width="7" height="7" fill="#1A1A2E"/><rect x="622" y="568" width="7" height="7" fill="#1A1A2E"/><rect x="629" y="568" width="7" height="7" fill="#1A1A2E"/><rect x="636" y="568" width="7" height="7" fill="#1A1A2E"/><rect x="643" y="568" width="7" height="7" fill="#1A1A2E"/><rect x="650" y="568" width="7" height="7" fill="#1A1A2E"/><rect x="657" y="568" width="7" height="7" fill="#1A1A2E"/></g>
+    <text x="732" y="545" text-anchor="middle" font-family="'Press Start 2P','Galmuri11',monospace" font-size="22" font-weight="900" fill="#1A1A2E" letter-spacing="0">COPY</text>
+  </g>
+  
+  </g>
+  <text x="540" y="820" text-anchor="middle" font-family="'Galmuri11','Apple SD Gothic Neo','Noto Sans KR',monospace" font-size="36" font-weight="900" fill="#FFFFFF" letter-spacing="0">추천받은 음악 경험을 한 번에 전달하세요</text>
+
+</svg>

@@ -6,6 +6,7 @@
    - `submit-song`
    - `recommend-songs`
    - `heart-song`
+   - `search-song`
 4. Set Edge Function secrets:
    - `PROJECT_URL`
    - `PROJECT_SERVICE_ROLE_KEY`
